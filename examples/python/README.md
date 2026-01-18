@@ -5,7 +5,7 @@ This directory contains Python examples for authenticating to Azure Managed Redi
 ## 📦 Required Packages
 
 ```bash
-pip install redis>=5.0.0 redis-entraid>=1.0.0
+pip install redis>=5.0.0 redis-entraid>=1.1.0
 ```
 
 Or use the requirements file:
@@ -111,9 +111,25 @@ client = Redis(
 
 | File | Description |
 |------|-------------|
-| `managed_identity_example.py` | Complete example using managed identity |
+| `managed_identity_example.py` | Complete example using managed identity (supports both cluster policies) |
 | `service_principal_example.py` | Complete example using service principal |
 | `flask_app_example/` | Full Flask application example |
+
+## 🔧 Cluster Policy Support
+
+The `managed_identity_example.py` automatically detects the cluster policy via the `REDIS_CLUSTER_POLICY` environment variable:
+
+- **EnterpriseCluster** (default): Uses standard `Redis` client - server handles slot routing
+- **OSSCluster**: Uses `RedisCluster` client with address remapping for SSL/SNI validation
+
+```python
+# The example auto-detects and uses the appropriate client
+cluster_policy = os.environ.get("REDIS_CLUSTER_POLICY", "EnterpriseCluster")
+if cluster_policy == "OSSCluster":
+    client = RedisCluster(...)  # Cluster-aware client with address_remap
+else:
+    client = Redis(...)  # Standard client
+```
 
 ## 🔧 Configuration
 

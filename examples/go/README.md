@@ -99,6 +99,23 @@ go/
 └── service_principal_example.go
 ```
 
+## 🔧 Cluster Policy Support
+
+The `managed_identity_example.go` automatically detects the cluster policy via the `REDIS_CLUSTER_POLICY` environment variable:
+
+- **EnterpriseCluster** (default): Uses `redis.NewClient()` - server handles slot routing
+- **OSSCluster**: Uses `redis.NewClusterClient()` with custom `Dialer` for address remapping
+
+```go
+// The example auto-detects and uses the appropriate client
+clusterPolicy := os.Getenv("REDIS_CLUSTER_POLICY")
+if clusterPolicy == "OSSCluster" {
+    client = redis.NewClusterClient(...)  // Cluster-aware client with custom Dialer
+} else {
+    client = redis.NewClient(...)  // Standard client
+}
+```
+
 ## 🔧 Running Examples
 
 ```bash

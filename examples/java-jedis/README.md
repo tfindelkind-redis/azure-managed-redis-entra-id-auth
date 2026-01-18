@@ -19,7 +19,7 @@ Add to your `pom.xml`:
     <dependency>
         <groupId>redis.clients.authentication</groupId>
         <artifactId>redis-authx-entraid</artifactId>
-        <version>0.1.1-beta1</version>
+        <version>0.1.1-beta2</version>
     </dependency>
 </dependencies>
 ```
@@ -29,7 +29,7 @@ Or for Gradle (`build.gradle`):
 ```groovy
 dependencies {
     implementation 'redis.clients:jedis:5.2.0'
-    implementation 'redis.clients.authentication:redis-authx-entraid:0.1.1-beta1'
+    implementation 'redis.clients.authentication:redis-authx-entraid:0.1.1-beta2'
 }
 ```
 

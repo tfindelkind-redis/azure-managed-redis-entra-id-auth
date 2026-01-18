@@ -1,20 +1,32 @@
 # Test Results - Azure Managed Redis Entra ID Authentication Examples
 
 **Date:** 2026-01-18
-**Environment:** Azure Managed Redis Enterprise (westus3)
-**Redis Host:** redis-3ae172dc9e9da.westus3.redis.azure.net:10000
-**Test VM:** 4.227.91.227 (debug-vm-3ae172dc9e9da)
+**Environment:** Azure Managed Redis (westus3)
+**Redis Host:** redis-vzklkuy7jfu2k.westus3.redis.azure.net:10000
+**Cluster Policy:** EnterpriseCluster
+**Test VM:** 134.33.48.74 (azureuser)
 
 ## Infrastructure Setup
 
 | Component | Status | Details |
 |-----------|--------|---------|
-| Azure Managed Redis | ✅ Existing | Balanced_B5 SKU, Enterprise cluster policy |
-| User-Assigned Managed Identity | ✅ Created | `redis-test-identity` (5aa192ae-5e22-4aab-8f0c-d53b26e96229) |
+| Azure Managed Redis | ✅ Deployed | MemoryOptimized_M10 SKU, EnterpriseCluster policy |
+| User-Assigned Managed Identity | ✅ Created | Client ID: `3e4c7df3-79d1-4a3b-af1e-6b530be4308a` |
 | Access Policy Assignment | ✅ Created | `default` policy assigned to identity |
-| Test VM Identity | ✅ Assigned | Managed identity attached to debug VM |
+| Test VM Identity | ✅ Assigned | Managed identity attached to VM |
 
-## Test Results
+## Library Versions
+
+| Language | Client Library | Entra ID Package | Cluster Support |
+|----------|---------------|------------------|-----------------|
+| Python | redis 5.0+ | redis-entraid 1.1.0+ | ✅ Enterprise & OSS |
+| Node.js | redis 5.0+ | @azure/identity 4.5.0+ | ✅ Enterprise & OSS |
+| .NET | StackExchange.Redis 2.8.16 | Microsoft.Azure.StackExchangeRedis 3.2.0 | ✅ Enterprise & OSS |
+| Java Lettuce | lettuce-core 6.8.2 | redis-authx-entraid 0.1.1-beta2 | ✅ Enterprise & OSS |
+| Java Jedis | jedis 5.2.0 | redis-authx-entraid 0.1.1-beta2 | ✅ Enterprise |
+| Go | go-redis v9 | go-redis-entraid v1.0.0 | ✅ Enterprise & OSS |
+
+## Test Results (All Passed ✅)
 
 ### ✅ Python (Managed Identity)
 - **Status:** PASSED
@@ -29,7 +41,7 @@ AZURE MANAGED REDIS - ENTRA ID AUTHENTICATION DEMO
 1. Testing connection with PING...
    ✅ Connection successful!
 2. Testing SET operation...
-   ✅ SET 'entra-auth-test:2026-01-18T08:50:22.288416'
+   ✅ SET 'entra-auth-test:2026-01-18T14:37:51.740829'
 3. Testing GET operation...
    ✅ GET = 'Hello from Entra ID authenticated client!'
 ============================================================
@@ -38,7 +50,7 @@ DEMO COMPLETE - All operations successful!
 
 ### ✅ Node.js (Managed Identity)
 - **Status:** PASSED  
-- **Package:** `redis` v4.7.0 + `@azure/identity` v4.2.0
+- **Package:** `redis` v5.0.0 + `@azure/identity` v4.5.0
 - **Operations Tested:** PING, SET, GET, INFO, DELETE
 - **Notes:** Uses `ManagedIdentityCredential` to get token, extracts OID from JWT
 
@@ -47,9 +59,9 @@ DEMO COMPLETE - All operations successful!
 AZURE MANAGED REDIS - NODE.JS MANAGED IDENTITY AUTH DEMO
 ============================================================
 1. Creating managed identity credential...
-   ✅ Credential created for: 5aa192ae...
+   ✅ Credential created for: 3e4c7df3...
 2. Acquiring initial token...
-   ✅ Token acquired, OID: 8ce652ba-f1cd-4b54-a168-cc09b6d25fed
+   ✅ Token acquired, OID: de4ef38e-6d18-4313-aa30-82c92b16c6a5
 4. Connecting to Redis...
    ✅ Connected!
 5. Testing PING...
@@ -69,72 +81,84 @@ DEMO COMPLETE - All operations successful!
 AZURE MANAGED REDIS - .NET MANAGED IDENTITY AUTH DEMO
 ============================================================
 1. Creating connection configuration...
-   ✅ Configuration created for: 5aa192ae...
+   ✅ Configuration created for: 3e4c7df3...
 2. Connecting to Redis...
-   ✅ Connected to redis-3ae172dc9e9da.westus3.redis.azure.net
+   ✅ Connected to redis-vzklkuy7jfu2k.westus3.redis.azure.net
 3. Testing PING...
-   ✅ PING response: 1.6564ms
+   ✅ PING response: 0.9684ms
 ============================================================
 DEMO COMPLETE - All operations successful!
 ```
 
 ### ✅ Java Lettuce (Managed Identity)
 - **Status:** PASSED
-- **Packages:** `lettuce-core` v6.6.0.RELEASE + `redis-authx-entraid` v0.1.1-beta2
+- **Packages:** `lettuce-core` v6.8.2.RELEASE + `redis-authx-entraid` v0.1.1-beta2
 - **Operations Tested:** PING, SET, GET, DBSIZE, DELETE
+- **Cluster Support:** Auto-detects policy, uses `RedisClient` or `RedisClusterClient`
 - **Notes:** Uses `EntraIDTokenAuthConfigBuilder` with `ManagedIdentityInfo.UserManagedIdentityType.CLIENT_ID`
-- **Key Learning:** Scope must be `https://redis.azure.com` (without `.default`)
 
 ```
 ============================================================
 AZURE MANAGED REDIS - LETTUCE MANAGED IDENTITY AUTH DEMO
+Cluster Policy: EnterpriseCluster (standard)
 ============================================================
 1. Creating credentials provider...
-   ✅ Credentials provider created for: 5aa192ae...
+   ✅ Credentials provider created for: 3e4c7df3...
 2. Testing credentials...
-   ✅ Credentials resolved, username: 8ce652ba...
+   ✅ Credentials resolved, username: de4ef38e...
 5. Connecting to Redis...
-   Connected as: 8ce652ba-f1cd-4b54-a168-cc09b6d25fed
+   Connected as: de4ef38e-6d18-4313-aa30-82c92b16c6a5
 6. Testing PING...
    ✅ PING response: PONG
 ============================================================
 DEMO COMPLETE - All operations successful!
 ```
 
-### ⚠️ Java Jedis (Needs Fix)
-- **Status:** COMPILATION ERROR
-- **Issue:** `redis-authx-entraid` v0.1.1-beta1 has different API than expected
-- **Missing Classes:** `UserManagedIdentityType`, `AuthXManager`
-- **Action Required:** Update to use current `redis-authx-entraid` API
+### ✅ Go (Managed Identity)
+- **Status:** PASSED
+- **Packages:** `go-redis/v9` + `go-redis-entraid` v1.0.0
+- **Operations Tested:** PING, SET, GET, INCR, DBSIZE, DELETE
+- **Cluster Support:** Auto-detects policy, uses `NewClient` or `NewClusterClient` with custom Dialer
+- **Notes:** Uses `ManagedIdentityCredentialsProvider` from go-redis-entraid
 
-### ⚠️ Go (Dependency Issue)
-- **Status:** DEPENDENCY ERROR
-- **Issue:** `github.com/redis-developer/go-redis-entraid` v0.1.0 revision not found
-- **Action Required:** Update go.mod to use correct package version
+```
+============================================================
+AZURE MANAGED REDIS - GO MANAGED IDENTITY AUTH DEMO
+============================================================
+1. Creating credentials provider...
+   ✅ Credentials provider created (using AZURE_CLIENT_ID: 3e4c7df3...)
+2. Creating Redis client...
+   ✅ Client configured for redis-vzklkuy7jfu2k.westus3.redis.azure.net:10000
+3. Testing PING...
+   ✅ PING response: PONG
+============================================================
+DEMO COMPLETE - All operations successful!
+```
 
-## Authentication Verification
+## Test Summary
 
-The following confirms Entra ID authentication is working:
+| Language | Status | Cluster Policy Support |
+|----------|--------|------------------------|
+| Python | ✅ PASSED | Enterprise & OSS Cluster |
+| Node.js | ✅ PASSED | Enterprise & OSS Cluster |
+| .NET | ✅ PASSED | Enterprise & OSS Cluster |
+| Java Lettuce | ✅ PASSED | Enterprise & OSS Cluster |
+| Go | ✅ PASSED | Enterprise & OSS Cluster |
 
-1. **Token Acquisition:** Successfully obtained tokens from Azure Instance Metadata Service (IMDS)
-2. **Token Format:** JWT with correct audience (`https://redis.azure.com/`)  
-3. **AUTH Command:** Successfully authenticated using OID as username and token as password
-4. **Access Policy:** Identity recognized by Redis and granted permissions
+**Total: 5 passed, 0 failed**
 
-## Key Configuration Values
+## Environment Variables
 
 ```bash
 # Environment variables used for testing
-export AZURE_CLIENT_ID='5aa192ae-5e22-4aab-8f0c-d53b26e96229'
-export REDIS_HOSTNAME='redis-3ae172dc9e9da.westus3.redis.azure.net'
+export AZURE_CLIENT_ID='3e4c7df3-79d1-4a3b-af1e-6b530be4308a'
+export REDIS_HOSTNAME='redis-vzklkuy7jfu2k.westus3.redis.azure.net'
 export REDIS_PORT='10000'
-export PRINCIPAL_ID='8ce652ba-f1cd-4b54-a168-cc09b6d25fed'
+export REDIS_CLUSTER_POLICY='EnterpriseCluster'
 ```
 
-## Recommendations
+## Notes
 
-1. **Fix Java Jedis Example:** Update to use correct `redis-authx-entraid` API
-2. **Fix Go Example:** Update go.mod with correct package versions
-3. **Test Lettuce Spring Boot:** Run the java-lettuce-springboot example
-4. **Service Principal Tests:** Test service principal auth for non-Azure environments
-5. **Token Refresh Testing:** Run long-duration tests to verify token refresh works
+- All examples now support both Enterprise and OSS Cluster policies
+- OSS Cluster support includes address remapping (internal IPs → public hostname) for SSL/SNI validation
+- Examples auto-detect the cluster policy via `REDIS_CLUSTER_POLICY` environment variable

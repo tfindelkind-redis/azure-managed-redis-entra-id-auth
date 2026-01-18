@@ -62,6 +62,21 @@ dotnet/
 └── ServicePrincipalExample.cs
 ```
 
+## 🔧 Cluster Policy Support
+
+The `ManagedIdentityExample.cs` automatically detects the cluster policy via the `REDIS_CLUSTER_POLICY` environment variable:
+
+- **EnterpriseCluster** (default): Standard connection - server handles slot routing
+- **OSSCluster**: Cluster-aware connection - StackExchange.Redis handles clustering automatically
+
+```csharp
+// The example auto-detects and uses the appropriate connection
+var clusterPolicy = Environment.GetEnvironmentVariable("REDIS_CLUSTER_POLICY") ?? "EnterpriseCluster";
+// StackExchange.Redis automatically handles cluster topology
+```
+
+> **Note:** StackExchange.Redis automatically discovers cluster topology and handles MOVED/ASK redirections, so no special address remapping is needed.
+
 ## 🔧 Running Examples
 
 ```bash

@@ -91,6 +91,23 @@ nodejs/
 └── default_credential_example.mjs
 ```
 
+## 🔧 Cluster Policy Support
+
+The `managed_identity_example.mjs` automatically detects the cluster policy via the `REDIS_CLUSTER_POLICY` environment variable:
+
+- **EnterpriseCluster** (default): Uses `createClient()` - server handles slot routing
+- **OSSCluster**: Uses `createCluster()` with `nodeAddressMap` for SSL/SNI validation
+
+```javascript
+// The example auto-detects and uses the appropriate client
+const clusterPolicy = process.env.REDIS_CLUSTER_POLICY || 'EnterpriseCluster';
+if (clusterPolicy === 'OSSCluster') {
+    client = createCluster({...});  // Cluster-aware client with nodeAddressMap
+} else {
+    client = createClient({...});   // Standard client
+}
+```
+
 ## 🔧 Running Examples
 
 ```bash

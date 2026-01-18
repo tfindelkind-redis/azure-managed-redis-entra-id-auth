@@ -86,13 +86,13 @@ azure-managed-redis-entra-id-auth/
 
 ### Official Redis Entra ID Packages
 
-| Language | Package | Latest Version | Auto Refresh |
-|----------|---------|----------------|--------------|
-| Python | redis-entraid | 1.0.0+ | ✅ Yes |
-| Java | redis-authx-entraid | 0.1.1-beta1 | ✅ Yes |
-| Node.js | @redis/entraid | 0.1.0+ | ✅ Yes |
-| Go | go-redis-entraid | 0.1.0+ | ✅ Yes |
-| .NET | Microsoft.Azure.StackExchangeRedis | 3.2.0+ | ✅ Yes |
+| Language | Package | Latest Version | Auto Refresh | Cluster Support |
+|----------|---------|----------------|--------------|-----------------|
+| Python | redis-entraid | 1.1.0+ | ✅ Yes | ✅ Enterprise & OSS |
+| Java | redis-authx-entraid | 0.1.1-beta2 | ✅ Yes | ✅ Enterprise & OSS |
+| Node.js | @azure/identity | 4.5.0+ | ✅ Yes | ✅ Enterprise & OSS |
+| Go | go-redis-entraid | 1.0.0+ | ✅ Yes | ✅ Enterprise & OSS |
+| .NET | Microsoft.Azure.StackExchangeRedis | 3.2.0+ | ✅ Yes | ✅ Enterprise & OSS |
 
 ### Authentication Methods Supported
 

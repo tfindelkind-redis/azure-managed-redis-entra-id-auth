@@ -12,14 +12,14 @@ Add to your `pom.xml`:
     <dependency>
         <groupId>io.lettuce</groupId>
         <artifactId>lettuce-core</artifactId>
-        <version>6.4.0.RELEASE</version>
+        <version>6.8.2.RELEASE</version>
     </dependency>
     
     <!-- Entra ID Authentication for Lettuce -->
     <dependency>
         <groupId>redis.clients.authentication</groupId>
         <artifactId>redis-authx-entraid</artifactId>
-        <version>0.1.1-beta1</version>
+        <version>0.1.1-beta2</version>
     </dependency>
 </dependencies>
 ```
@@ -105,8 +105,28 @@ java-lettuce/
         └── java/
             └── com/
                 └── example/
-                    ├── ManagedIdentityExample.java
+                    ├── ManagedIdentityExample.java      # Supports both cluster policies
+                    ├── ClusterManagedIdentityExample.java # Legacy OSS Cluster example
                     └── ServicePrincipalExample.java
+```
+
+## 🔧 Cluster Policy Support
+
+The `ManagedIdentityExample.java` automatically detects the cluster policy via the `REDIS_CLUSTER_POLICY` environment variable:
+
+- **EnterpriseCluster** (default): Uses `RedisClient` - server handles slot routing
+- **OSSCluster**: Uses `RedisClusterClient` with `MappingSocketAddressResolver` for SSL/SNI validation
+
+```java
+// The example auto-detects and uses the appropriate client
+String clusterPolicy = System.getenv().getOrDefault("REDIS_CLUSTER_POLICY", "EnterpriseCluster");
+if ("OSSCluster".equalsIgnoreCase(clusterPolicy)) {
+    // Use RedisClusterClient with MappingSocketAddressResolver
+    runWithClusterClient(clientId, redisHost, redisPort);
+} else {
+    // Use standard RedisClient
+    runWithStandardClient(clientId, redisHost, redisPort);
+}
 ```
 
 ## 🔧 Building and Running

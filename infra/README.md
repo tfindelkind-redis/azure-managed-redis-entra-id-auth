@@ -95,7 +95,7 @@ export REDIS_PORT="10000"
 | `environmentName` | Name prefix for resources | (required) |
 | `location` | Azure region | (required) |
 | `redisSku` | Redis SKU | `MemoryOptimized_M10` |
-| `enableClusterMode` | Enable OSS Cluster mode | `true` |
+| `redisClusterPolicy` | Cluster policy: `EnterpriseCluster` or `OSSCluster` | `EnterpriseCluster` |
 | `vmAdminUsername` | VM admin user | `azureuser` |
 | `vmAdminPassword` | VM admin password | (required) |
 

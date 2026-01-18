@@ -16,17 +16,17 @@ This repository provides:
 
 ## 📚 Supported Languages & Client Libraries
 
-| Language | Client Library | Entra ID Package | Status |
-|----------|---------------|------------------|--------|
-| [Python](./examples/python/) | redis-py | redis-entraid | ✅ Complete |
-| [Java (Jedis)](./examples/java-jedis/) | Jedis | redis-authx-entraid | ✅ Complete |
-| [Java (Lettuce)](./examples/java-lettuce/) | Lettuce | redis-authx-entraid | ✅ Complete |
-| [Java (Lettuce + Spring Boot)](./examples/java-lettuce-springboot/) | Lettuce + Spring Boot | redis-authx-entraid | ✅ Complete |
-| [Node.js](./examples/nodejs/) | node-redis | @redis/entraid | ✅ Complete |
-| [Go](./examples/go/) | go-redis | go-redis-entraid | ✅ Complete |
-| [.NET/C#](./examples/dotnet/) | StackExchange.Redis | Microsoft.Azure.StackExchangeRedis | ✅ Complete |
+| Language | Client Library | Entra ID Package | Cluster Policy Support |
+|----------|---------------|------------------|------------------------|
+| [Python](./examples/python/) | redis-py 5.0+ | redis-entraid 1.1+ | ✅ Enterprise & OSS Cluster |
+| [Java (Jedis)](./examples/java-jedis/) | Jedis 5.2+ | redis-authx-entraid 0.1.1-beta2 | ✅ Enterprise |
+| [Java (Lettuce)](./examples/java-lettuce/) | Lettuce 6.8+ | redis-authx-entraid 0.1.1-beta2 | ✅ Enterprise & OSS Cluster |
+| [Java (Lettuce + Spring Boot)](./examples/java-lettuce-springboot/) | Lettuce + Spring Boot | redis-authx-entraid | ✅ Enterprise & OSS Cluster |
+| [Node.js](./examples/nodejs/) | node-redis 5.0+ | @azure/identity 4.5+ | ✅ Enterprise & OSS Cluster |
+| [Go](./examples/go/) | go-redis v9 | go-redis-entraid v1.0 | ✅ Enterprise & OSS Cluster |
+| [.NET/C#](./examples/dotnet/) | StackExchange.Redis 2.8+ | Microsoft.Azure.StackExchangeRedis 3.2+ | ✅ Enterprise & OSS Cluster |
 
-> **Note:** The Spring Boot example includes critical configurations for **Cluster OSS** mode, including `MappingSocketAddressResolver` and Azure best practices for topology refresh.
+> **Cluster Policy Support:** All examples auto-detect the `REDIS_CLUSTER_POLICY` environment variable and use the appropriate client (standard vs cluster-aware with address remapping for OSS Cluster).
 
 ## 🏗️ Repository Structure
 
@@ -131,8 +131,7 @@ azd up
 ./run.sh python
 ./run.sh nodejs
 ./run.sh dotnet
-./run.sh java             # Java Lettuce (Enterprise policy)
-./run.sh java --cluster   # Java Lettuce Cluster (OSS Cluster policy)
+./run.sh java             # Java Lettuce (auto-detects cluster policy)
 ./run.sh jedis            # Java Jedis
 ./run.sh go
 
@@ -149,9 +148,9 @@ azd env set REDIS_CLUSTER_POLICY OSSCluster
 # Deploy
 azd up
 
-# Test cluster-aware client
+# Run tests (examples auto-detect cluster policy)
 ./run.sh setup
-./run.sh java --cluster
+./run.sh all
 ```
 
 ### Manual VM Access
