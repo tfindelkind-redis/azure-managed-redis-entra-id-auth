@@ -119,7 +119,8 @@ setup_vm() {
     echo -e "${BLUE}📦 Setting up examples on VM...${NC}"
     
     # Create directories on VM
-    run_on_vm "mkdir -p ~/python ~/nodejs ~/dotnet ~/java-lettuce ~/java-jedis ~/go"
+    # Note: ~/go is GOPATH default, so use ~/go-example for Go code
+    run_on_vm "mkdir -p ~/python ~/nodejs ~/dotnet ~/java-lettuce ~/java-jedis ~/go-example"
     
     # Copy example files
     echo "   Copying Python example..."
@@ -143,8 +144,8 @@ setup_vm() {
         scp -o StrictHostKeyChecking=no -r "$SCRIPT_DIR/examples/java-jedis/"* "azureuser@$VM_PUBLIC_IP:~/java-jedis/"
     
     echo "   Copying Go example..."
-    sshpass -p "$VM_ADMIN_PASSWORD" scp -o StrictHostKeyChecking=no -r "$SCRIPT_DIR/examples/go/"* "azureuser@$VM_PUBLIC_IP:~/go/" 2>/dev/null || \
-        scp -o StrictHostKeyChecking=no -r "$SCRIPT_DIR/examples/go/"* "azureuser@$VM_PUBLIC_IP:~/go/"
+    sshpass -p "$VM_ADMIN_PASSWORD" scp -o StrictHostKeyChecking=no -r "$SCRIPT_DIR/examples/go/"* "azureuser@$VM_PUBLIC_IP:~/go-example/" 2>/dev/null || \
+        scp -o StrictHostKeyChecking=no -r "$SCRIPT_DIR/examples/go/"* "azureuser@$VM_PUBLIC_IP:~/go-example/"
     
     echo -e "${GREEN}✅ Examples copied to VM${NC}"
 }
@@ -163,6 +164,7 @@ run_python() {
         export AZURE_CLIENT_ID='$AZURE_CLIENT_ID' && \
         export REDIS_HOSTNAME='$REDIS_HOSTNAME' && \
         export REDIS_PORT='$REDIS_PORT' && \
+        export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
         python managed_identity_example.py"
 }
 
@@ -178,6 +180,7 @@ run_nodejs() {
         export AZURE_CLIENT_ID='$AZURE_CLIENT_ID' && \
         export REDIS_HOSTNAME='$REDIS_HOSTNAME' && \
         export REDIS_PORT='$REDIS_PORT' && \
+        export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
         node managed_identity_example.mjs"
 }
 
@@ -192,20 +195,22 @@ run_dotnet() {
         export AZURE_CLIENT_ID='$AZURE_CLIENT_ID' && \
         export REDIS_HOSTNAME='$REDIS_HOSTNAME' && \
         export REDIS_PORT='$REDIS_PORT' && \
+        export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
         dotnet run -- --ManagedIdentity 2>&1"
 }
 
-# Run Java Lettuce example (Enterprise policy - standard client)
+# Run Java Lettuce example (supports both Enterprise and OSS Cluster)
 run_java() {
     echo ""
     echo -e "${BLUE}==========================================${NC}"
-    echo -e "${BLUE}  Running Java Lettuce Example (Enterprise)${NC}"
+    echo -e "${BLUE}  Running Java Lettuce Example${NC}"
     echo -e "${BLUE}==========================================${NC}"
     
     run_on_vm "cd ~/java-lettuce && \
         export AZURE_CLIENT_ID='$AZURE_CLIENT_ID' && \
         export REDIS_HOSTNAME='$REDIS_HOSTNAME' && \
         export REDIS_PORT='$REDIS_PORT' && \
+        export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
         mvn compile -q && \
         mvn exec:java -Dexec.mainClass='com.example.ManagedIdentityExample' -q 2>&1"
 }
@@ -254,11 +259,17 @@ run_go() {
     echo -e "${BLUE}  Running Go Example${NC}"
     echo -e "${BLUE}==========================================${NC}"
     
-    run_on_vm "cd ~/go && \
+    run_on_vm "cd ~/go-example && \
         export AZURE_CLIENT_ID='$AZURE_CLIENT_ID' && \
         export REDIS_HOSTNAME='$REDIS_HOSTNAME' && \
         export REDIS_PORT='$REDIS_PORT' && \
+        export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
         export PATH=\$PATH:/usr/local/go/bin && \
+        export GO111MODULE=on && \
+        export GOPATH=\$HOME/gopath && \
+        export GOCACHE=\$HOME/gocache && \
+        mkdir -p \$GOPATH \$GOCACHE && \
+        go mod tidy && \
         go run managed_identity_example.go 2>&1"
 }
 
@@ -272,88 +283,64 @@ run_all() {
     echo ""
     
     if [ "$REDIS_CLUSTER_POLICY" = "OSSCluster" ]; then
-        echo -e "${YELLOW}⚠️  OSS Cluster Policy detected.${NC}"
-        echo -e "${YELLOW}   Standard clients may fail with MOVED errors for cross-slot keys.${NC}"
-        echo -e "${YELLOW}   Running cluster-aware tests only...${NC}"
+        echo -e "${CYAN}ℹ️  OSS Cluster Policy detected.${NC}"
+        echo -e "${CYAN}   All examples now support cluster-aware clients with address remapping.${NC}"
+        echo ""
+    else
+        echo -e "${CYAN}ℹ️  Enterprise Cluster Policy detected.${NC}"
+        echo -e "${CYAN}   Using standard Redis clients (server handles slot routing).${NC}"
         echo ""
     fi
     
     local passed=0
     local failed=0
-    local skipped=0
     local results=()
     
-    # For OSS Cluster, skip non-cluster-aware examples that will definitely fail
-    if [ "$REDIS_CLUSTER_POLICY" = "OSSCluster" ]; then
-        results+=("Python: ⏭️ SKIPPED (no cluster client)")
-        results+=("Node.js: ⏭️ SKIPPED (no cluster client)")
-        results+=("Go: ⏭️ SKIPPED (no cluster client)")
-        ((skipped+=3))
-        
-        # .NET works partially (depends on hash slot luck)
-        if run_dotnet; then
-            results+=(".NET: ✅ PASSED (single-key ops)")
-            ((passed++))
-        else
-            results+=(".NET: ❌ FAILED")
-            ((failed++))
-        fi
-        
-        # Java Lettuce Cluster (the cluster-aware one)
-        if run_java_cluster; then
-            results+=("Java Lettuce Cluster: ✅ PASSED")
-            ((passed++))
-        else
-            results+=("Java Lettuce Cluster: ❌ FAILED")
-            ((failed++))
-        fi
+    # All examples now support both Enterprise and OSS Cluster policies
+    
+    # Python
+    if run_python; then
+        results+=("Python: ✅ PASSED")
+        ((passed++))
     else
-        # Enterprise cluster policy - all standard clients work
-        
-        # Python
-        if run_python; then
-            results+=("Python: ✅ PASSED")
-            ((passed++))
-        else
-            results+=("Python: ❌ FAILED")
-            ((failed++))
-        fi
-        
-        # Node.js
-        if run_nodejs; then
-            results+=("Node.js: ✅ PASSED")
-            ((passed++))
-        else
-            results+=("Node.js: ❌ FAILED")
-            ((failed++))
-        fi
-        
-        # .NET
-        if run_dotnet; then
-            results+=(".NET: ✅ PASSED")
-            ((passed++))
-        else
-            results+=(".NET: ❌ FAILED")
-            ((failed++))
-        fi
-        
-        # Java Lettuce
-        if run_java; then
-            results+=("Java Lettuce: ✅ PASSED")
-            ((passed++))
-        else
-            results+=("Java Lettuce: ❌ FAILED")
-            ((failed++))
-        fi
-        
-        # Go
-        if run_go; then
-            results+=("Go: ✅ PASSED")
-            ((passed++))
-        else
-            results+=("Go: ❌ FAILED")
-            ((failed++))
-        fi
+        results+=("Python: ❌ FAILED")
+        ((failed++))
+    fi
+    
+    # Node.js
+    if run_nodejs; then
+        results+=("Node.js: ✅ PASSED")
+        ((passed++))
+    else
+        results+=("Node.js: ❌ FAILED")
+        ((failed++))
+    fi
+    
+    # .NET
+    if run_dotnet; then
+        results+=(".NET: ✅ PASSED")
+        ((passed++))
+    else
+        results+=(".NET: ❌ FAILED")
+        ((failed++))
+    fi
+    
+    # Java Lettuce (uses appropriate client based on policy)
+    if run_java; then
+        results+=("Java Lettuce: ✅ PASSED")
+        ((passed++))
+    else
+        results+=("Java Lettuce: ❌ FAILED")
+        ((failed++))
+    fi
+    
+    # Go
+    if run_go; then
+        results+=("Go: ✅ PASSED")
+        ((passed++))
+    else
+        results+=("Go: ❌ FAILED")
+        ((failed++))
     fi
     
     # Summary
@@ -365,7 +352,7 @@ run_all() {
         echo "  $result"
     done
     echo ""
-    echo -e "  Total: ${GREEN}$passed passed${NC}, ${RED}$failed failed${NC}, ${YELLOW}$skipped skipped${NC}"
+    echo -e "  Total: ${GREEN}$passed passed${NC}, ${RED}$failed failed${NC}"
     echo ""
     
     [ $failed -eq 0 ] && return 0 || return 1

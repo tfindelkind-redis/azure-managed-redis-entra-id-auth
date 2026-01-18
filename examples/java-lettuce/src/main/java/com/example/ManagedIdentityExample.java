@@ -6,8 +6,14 @@ import io.lettuce.authx.TokenBasedRedisCredentialsProvider;
 import io.lettuce.core.*;
 import io.lettuce.core.api.StatefulRedisConnection;
 import io.lettuce.core.api.sync.RedisCommands;
+import io.lettuce.core.cluster.*;
+import io.lettuce.core.cluster.api.StatefulRedisClusterConnection;
+import io.lettuce.core.cluster.api.sync.RedisAdvancedClusterCommands;
 import io.lettuce.core.codec.StringCodec;
+import io.lettuce.core.internal.HostAndPort;
+import io.lettuce.core.resource.*;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Set;
@@ -18,19 +24,21 @@ import java.util.Set;
  * This example demonstrates how to connect to Azure Managed Redis using
  * a User-Assigned Managed Identity with Entra ID authentication.
  * 
+ * CLUSTER POLICY SUPPORT:
+ * - Enterprise Cluster: Uses standard RedisClient (server handles slot routing)
+ * - OSS Cluster: Uses RedisClusterClient with address remapping for SSL/SNI
+ * 
  * Requires Lettuce 6.6.0+ and redis-authx-entraid 0.1.1-beta2+
  * 
  * Environment Variables:
  * - AZURE_CLIENT_ID: Client ID of the user-assigned managed identity
  * - REDIS_HOSTNAME: Hostname of your Azure Managed Redis instance
  * - REDIS_PORT: Port (default: 10000)
+ * - REDIS_CLUSTER_POLICY: "EnterpriseCluster" or "OSSCluster" (default: EnterpriseCluster)
  */
 public class ManagedIdentityExample {
     
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-    
-    // Azure Redis scope for OAuth token requests  
-    // Use the Redis app ID with /.default for managed identity tokens
     private static final String REDIS_SCOPE = "https://redis.azure.com";
 
     public static void main(String[] args) {
@@ -38,6 +46,7 @@ public class ManagedIdentityExample {
         String clientId = System.getenv("AZURE_CLIENT_ID");
         String redisHost = System.getenv("REDIS_HOSTNAME");
         int redisPort = Integer.parseInt(System.getenv().getOrDefault("REDIS_PORT", "10000"));
+        String clusterPolicy = System.getenv().getOrDefault("REDIS_CLUSTER_POLICY", "EnterpriseCluster");
 
         // Validate configuration
         if (clientId == null || clientId.isEmpty()) {
@@ -49,42 +58,52 @@ public class ManagedIdentityExample {
             System.exit(1);
         }
 
+        boolean isOSSCluster = "OSSCluster".equalsIgnoreCase(clusterPolicy);
+
         System.out.println("\n" + "=".repeat(60));
         System.out.println("AZURE MANAGED REDIS - LETTUCE MANAGED IDENTITY AUTH DEMO");
+        System.out.println("Cluster Policy: " + clusterPolicy + (isOSSCluster ? " (cluster-aware)" : " (standard)"));
         System.out.println("=".repeat(60) + "\n");
 
+        if (isOSSCluster) {
+            runWithClusterClient(clientId, redisHost, redisPort);
+        } else {
+            runWithStandardClient(clientId, redisHost, redisPort);
+        }
+    }
+
+    /**
+     * Run with standard RedisClient (for Enterprise Cluster policy)
+     */
+    private static void runWithStandardClient(String clientId, String redisHost, int redisPort) {
         TokenBasedRedisCredentialsProvider credentials = null;
         RedisClient redisClient = null;
 
         try {
-            // Create Entra ID credentials provider using User-Assigned Managed Identity
+            // Create Entra ID credentials provider
             System.out.println("1. Creating credentials provider...");
             try (EntraIDTokenAuthConfigBuilder builder = EntraIDTokenAuthConfigBuilder.builder()) {
-                // Configure for user-assigned managed identity using client ID
                 builder.userAssignedManagedIdentity(
                     ManagedIdentityInfo.UserManagedIdentityType.CLIENT_ID,
                     clientId
                 );
-                // Set the required scopes for Azure Redis
                 builder.scopes(Set.of(REDIS_SCOPE));
                 credentials = TokenBasedRedisCredentialsProvider.create(builder.build());
             }
             System.out.println("   ✅ Credentials provider created for: " + clientId.substring(0, 8) + "...\n");
 
-            // Test credentials (optional)
+            // Test credentials
             System.out.println("2. Testing credentials...");
-            final TokenBasedRedisCredentialsProvider finalCredentials = credentials;
             credentials.resolveCredentials()
                 .doOnNext(c -> System.out.println("   ✅ Credentials resolved, username: " + c.getUsername().substring(0, 8) + "...\n"))
                 .block();
 
             // Enable automatic re-authentication
-            // Following Azure Best Practices: https://github.com/Azure/AzureCacheForRedis/blob/main/Lettuce%20Best%20Practices.md
             System.out.println("3. Creating client options with auto re-authentication...");
             ClientOptions clientOptions = ClientOptions.builder()
                 .reauthenticateBehavior(ClientOptions.ReauthenticateBehavior.ON_NEW_CREDENTIALS)
                 .socketOptions(io.lettuce.core.SocketOptions.builder()
-                    .keepAlive(true)  // Required for Azure - keeps connections alive
+                    .keepAlive(true)
                     .build())
                 .build();
             System.out.println("   ✅ Auto re-authentication enabled, keepAlive=true\n");
@@ -152,5 +171,176 @@ public class ManagedIdentityExample {
                 credentials.close();
             }
         }
+    }
+
+    /**
+     * Run with RedisClusterClient (for OSS Cluster policy)
+     * Uses MappingSocketAddressResolver to remap internal IPs for SSL/SNI
+     */
+    private static void runWithClusterClient(String clientId, String redisHost, int redisPort) {
+        TokenBasedRedisCredentialsProvider credentials = null;
+        RedisClusterClient clusterClient = null;
+        ClientResources clientResources = null;
+
+        try {
+            // Create Entra ID credentials provider
+            System.out.println("1. Creating credentials provider...");
+            try (EntraIDTokenAuthConfigBuilder builder = EntraIDTokenAuthConfigBuilder.builder()) {
+                builder.userAssignedManagedIdentity(
+                    ManagedIdentityInfo.UserManagedIdentityType.CLIENT_ID,
+                    clientId
+                );
+                builder.scopes(Set.of(REDIS_SCOPE));
+                credentials = TokenBasedRedisCredentialsProvider.create(builder.build());
+            }
+            System.out.println("   ✅ Credentials provider created for: " + clientId.substring(0, 8) + "...\n");
+
+            // Create MappingSocketAddressResolver for SSL/SNI hostname verification
+            // Required for OSS Cluster: maps internal IPs to public hostname
+            System.out.println("2. Creating MappingSocketAddressResolver for SSL hostname verification...");
+            final String finalRedisHost = redisHost;
+            MappingSocketAddressResolver resolver = MappingSocketAddressResolver.create(
+                DnsResolvers.UNRESOLVED,
+                hostAndPort -> {
+                    String host = hostAndPort.getHostText();
+                    int port = hostAndPort.getPort();
+                    
+                    if (isInternalIP(host)) {
+                        System.out.println("   🔄 Mapping " + host + ":" + port + " -> " + finalRedisHost + ":" + port);
+                        return HostAndPort.of(finalRedisHost, port);
+                    }
+                    return hostAndPort;
+                }
+            );
+            System.out.println("   ✅ Address resolver created\n");
+
+            // Create ClientResources with the resolver
+            System.out.println("3. Creating ClientResources...");
+            clientResources = DefaultClientResources.builder()
+                .socketAddressResolver(resolver)
+                .build();
+            System.out.println("   ✅ ClientResources created\n");
+
+            // Build Redis URI with authentication
+            System.out.println("4. Building Redis URI...");
+            SslOptions sslOptions = SslOptions.builder()
+                .jdkSslProvider()
+                .handshakeTimeout(Duration.ofSeconds(30))
+                .build();
+
+            RedisURI redisURI = RedisURI.builder()
+                .withHost(redisHost)
+                .withPort(redisPort)
+                .withAuthentication(credentials)
+                .withSsl(true)
+                .build();
+            System.out.println("   ✅ URI built for " + redisHost + ":" + redisPort + "\n");
+
+            // Create cluster client with options
+            System.out.println("5. Creating Cluster Client...");
+            clusterClient = RedisClusterClient.create(clientResources, redisURI);
+            
+            ClusterClientOptions clusterOptions = ClusterClientOptions.builder()
+                .topologyRefreshOptions(ClusterTopologyRefreshOptions.builder()
+                    .enablePeriodicRefresh(Duration.ofMinutes(1))
+                    .enableAllAdaptiveRefreshTriggers()
+                    .build())
+                .sslOptions(sslOptions)
+                .socketOptions(io.lettuce.core.SocketOptions.builder()
+                    .keepAlive(true)
+                    .build())
+                .reauthenticateBehavior(ClientOptions.ReauthenticateBehavior.ON_NEW_CREDENTIALS)
+                .validateClusterNodeMembership(false)
+                .build();
+            
+            clusterClient.setOptions(clusterOptions);
+            System.out.println("   ✅ Cluster client created with topology refresh\n");
+
+            System.out.println("6. Connecting to Redis Cluster...");
+            try (StatefulRedisClusterConnection<String, String> connection = clusterClient.connect(StringCodec.UTF8)) {
+                RedisAdvancedClusterCommands<String, String> commands = connection.sync();
+                
+                System.out.println("   ✅ Connected to cluster\n");
+                
+                // Show cluster info
+                System.out.println("7. Checking cluster topology...");
+                String clusterInfo = commands.clusterInfo();
+                for (String line : clusterInfo.split("\n")) {
+                    if (line.startsWith("cluster_state") || line.startsWith("cluster_slots_ok") || line.startsWith("cluster_known_nodes")) {
+                        System.out.println("   " + line.trim());
+                    }
+                }
+                System.out.println();
+
+                // Current user
+                System.out.println("   Connected as: " + commands.aclWhoami() + "\n");
+
+                // Test PING
+                System.out.println("8. Testing PING...");
+                System.out.println("   ✅ PING response: " + commands.ping() + "\n");
+
+                // Test SET
+                System.out.println("9. Testing SET operation...");
+                String testKey = "lettuce-entra-test:" + LocalDateTime.now().format(FORMATTER);
+                String testValue = "Hello from Lettuce with Entra ID auth!";
+                commands.setex(testKey, 60, testValue);
+                System.out.println("   ✅ SET '" + testKey + "'\n");
+
+                // Test GET
+                System.out.println("10. Testing GET operation...");
+                String retrieved = commands.get(testKey);
+                System.out.println("   ✅ GET '" + testKey + "' = '" + retrieved + "'\n");
+
+                // Test DBSIZE
+                System.out.println("11. Getting database size...");
+                long dbSize = commands.dbsize();
+                System.out.println("   Database contains " + dbSize + " keys\n");
+
+                // Cleanup
+                System.out.println("12. Cleaning up test key...");
+                commands.del(testKey);
+                System.out.println("   ✅ Deleted test key\n");
+
+                System.out.println("=".repeat(60));
+                System.out.println("DEMO COMPLETE - All operations successful!");
+                System.out.println("=".repeat(60));
+            }
+        } catch (Exception e) {
+            System.err.println("\n❌ Error: " + e.getMessage());
+            e.printStackTrace();
+            System.exit(1);
+        } finally {
+            if (clusterClient != null) {
+                clusterClient.shutdown();
+            }
+            if (clientResources != null) {
+                clientResources.shutdown();
+            }
+            if (credentials != null) {
+                credentials.close();
+            }
+        }
+    }
+
+    /**
+     * Helper to check if an address is an internal IP (RFC 1918)
+     */
+    private static boolean isInternalIP(String host) {
+        return host.startsWith("10.") || 
+               host.startsWith("192.168.") || 
+               (host.startsWith("172.") && isPrivate172(host));
+    }
+    
+    private static boolean isPrivate172(String host) {
+        try {
+            String[] parts = host.split("\\.");
+            if (parts.length >= 2) {
+                int second = Integer.parseInt(parts[1]);
+                return second >= 16 && second <= 31;
+            }
+        } catch (NumberFormatException e) {
+            // Not a valid IP
+        }
+        return false;
     }
 }

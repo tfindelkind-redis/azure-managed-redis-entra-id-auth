@@ -7,7 +7,7 @@ a User-Assigned Managed Identity with Entra ID authentication.
 Requirements:
 - Go 1.21+
 - go-redis v9.9.0+
-- go-redis-entraid
+- go-redis-entraid v1.0.0+
 
 Environment Variables:
 - AZURE_CLIENT_ID: Client ID of the user-assigned managed identity
@@ -28,8 +28,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/redis-developer/go-redis-entraid/entraid"
-	"github.com/redis-developer/go-redis-entraid/identity"
+	entraid "github.com/redis/go-redis-entraid"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -60,20 +59,16 @@ func main() {
 	fmt.Println("============================================================")
 	fmt.Println()
 
-	// Create credentials provider for user-assigned managed identity
+	// Create credentials provider using DefaultAzureCredential
+	// DefaultAzureCredential automatically reads AZURE_CLIENT_ID env var for user-assigned managed identity
 	fmt.Println("1. Creating credentials provider...")
-	provider, err := entraid.NewManagedIdentityCredentialsProvider(
-		entraid.ManagedIdentityCredentialsProviderOptions{
-			ManagedIdentityProviderOptions: identity.ManagedIdentityProviderOptions{
-				ManagedIdentityType:  identity.UserAssignedClientID,
-				UserAssignedClientID: clientID,
-			},
-		},
+	provider, err := entraid.NewDefaultAzureCredentialsProvider(
+		entraid.DefaultAzureCredentialsProviderOptions{},
 	)
 	if err != nil {
 		log.Fatalf("   ❌ Failed to create credentials provider: %v", err)
 	}
-	fmt.Printf("   ✅ Credentials provider created for: %s...\n\n", clientID[:8])
+	fmt.Printf("   ✅ Credentials provider created (using AZURE_CLIENT_ID: %s...)\n\n", clientID[:8])
 
 	// Create Redis client with TLS
 	fmt.Println("2. Creating Redis client...")

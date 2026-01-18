@@ -9,8 +9,8 @@
     "start:default-credential": "node default_credential_example.mjs"
   },
   "dependencies": {
-    "redis": "^4.7.0",
-    "@azure/identity": "^4.2.0"
+    "redis": "^5.0.0",
+    "@azure/identity": "^4.5.0"
   },
   "engines": {
     "node": ">=18.0.0"
