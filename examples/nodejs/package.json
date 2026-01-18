@@ -1,0 +1,19 @@
+{
+  "name": "nodejs-entra-redis-example",
+  "version": "1.0.0",
+  "description": "Node.js examples for Entra ID authentication with Azure Managed Redis",
+  "type": "module",
+  "scripts": {
+    "start:managed-identity": "node managed_identity_example.mjs",
+    "start:service-principal": "node service_principal_example.mjs",
+    "start:default-credential": "node default_credential_example.mjs"
+  },
+  "dependencies": {
+    "@redis/client": "^1.6.0",
+    "@redis/entraid": "^0.3.0",
+    "@azure/identity": "^4.2.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

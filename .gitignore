@@ -1,0 +1,65 @@
+# Ignore editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+.venv/
+env/
+.env
+*.egg-info/
+dist/
+build/
+
+# Java
+target/
+*.class
+*.jar
+*.war
+*.ear
+*.log
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# Go
+go.sum
+vendor/
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+packages/
+
+# Terraform (if any)
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfplan
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Secrets - NEVER commit these
+*.pem
+*.key
+.env.local
+.env.*.local
+secrets.json
