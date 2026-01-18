@@ -1,0 +1,58 @@
+# Azure Managed Redis - Spring Boot Lettuce Cluster Configuration
+# 
+# This configuration is designed for Azure Managed Redis (Cluster OSS tier)
+# with Entra ID authentication using User-Assigned Managed Identity.
+
+azure:
+  redis:
+    # Azure Managed Redis hostname (e.g., my-redis.region.redis.azure.net)
+    hostname: ${REDIS_HOSTNAME:}
+    # Port - typically 10000 for Azure Managed Redis
+    port: ${REDIS_PORT:10000}
+    # Always use SSL for Azure Managed Redis
+    ssl: true
+    
+  identity:
+    # Client ID of the User-Assigned Managed Identity
+    # This identity must have an access policy assigned in Azure Managed Redis
+    client-id: ${AZURE_CLIENT_ID:}
+
+# Spring configuration
+spring:
+  application:
+    name: lettuce-springboot-cluster-entra
+  
+  # Disable Spring's auto-configuration for Redis
+  # We're using our custom configuration with Entra ID auth
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+  
+  # Enable scheduling for token validation
+  main:
+    allow-bean-definition-overriding: true
+
+# Logging configuration
+logging:
+  level:
+    root: INFO
+    com.example: DEBUG
+    # Enable detailed Lettuce logging for debugging
+    io.lettuce.core: INFO
+    # Enable token/auth debugging
+    redis.clients.authentication: DEBUG
+    com.azure.identity: INFO
+    
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# Actuator endpoints (optional, useful for monitoring)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always

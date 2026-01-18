@@ -1,0 +1,14 @@
+# Azure Developer CLI (azd) configuration
+# This deploys a test environment with Azure Managed Redis and a VM for testing examples
+name: redis-entra-id-test-env
+metadata:
+  template: redis-entra-id-test-env@0.0.1
+
+# Infrastructure configuration
+infra:
+  provider: bicep
+  path: ./infra
+  module: main
+
+# No application services - this is infrastructure-only for testing
+# The VM will be used to run the example code manually

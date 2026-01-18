@@ -1,0 +1,9 @@
+{
+  "managedIdentityUserAssignedIdentities": "id-",
+  "networkVirtualNetworks": "vnet-",
+  "networkNetworkSecurityGroups": "nsg-",
+  "networkPublicIPAddresses": "pip-",
+  "networkNetworkInterfaces": "nic-",
+  "computeVirtualMachines": "vm-",
+  "cacheRedis": "redis-"
+}

@@ -21,9 +21,12 @@ This repository provides:
 | [Python](./examples/python/) | redis-py | redis-entraid | ✅ Complete |
 | [Java (Jedis)](./examples/java-jedis/) | Jedis | redis-authx-entraid | ✅ Complete |
 | [Java (Lettuce)](./examples/java-lettuce/) | Lettuce | redis-authx-entraid | ✅ Complete |
+| [Java (Lettuce + Spring Boot)](./examples/java-lettuce-springboot/) | Lettuce + Spring Boot | redis-authx-entraid | ✅ Complete |
 | [Node.js](./examples/nodejs/) | node-redis | @redis/entraid | ✅ Complete |
 | [Go](./examples/go/) | go-redis | go-redis-entraid | ✅ Complete |
 | [.NET/C#](./examples/dotnet/) | StackExchange.Redis | Microsoft.Azure.StackExchangeRedis | ✅ Complete |
+
+> **Note:** The Spring Boot example includes critical configurations for **Cluster OSS** mode, including `MappingSocketAddressResolver` and Azure best practices for topology refresh.
 
 ## 🏗️ Repository Structure
 
@@ -67,6 +70,10 @@ azure-managed-redis-entra-id-auth/
 │   │   ├── README.md
 │   │   ├── pom.xml
 │   │   └── src/
+│   ├── java-lettuce-springboot/        # Spring Boot + Cluster OSS example
+│   │   ├── README.md
+│   │   ├── pom.xml
+│   │   └── src/
 │   ├── nodejs/
 │   │   ├── README.md
 │   │   ├── package.json
@@ -81,10 +88,53 @@ azure-managed-redis-entra-id-auth/
 │       ├── README.md
 │       ├── EntraIdAuth.csproj
 │       └── Program.cs
+├── infra/                              # Azure Developer CLI (azd) templates
+│   ├── README.md
+│   ├── main.bicep
+│   ├── main.parameters.json
+│   ├── modules/
+│   │   ├── managed-identity.bicep
+│   │   ├── vnet.bicep
+│   │   ├── redis.bicep
+│   │   └── vm.bicep
+│   └── scripts/
+│       └── install-runtimes.sh
 └── scripts/
     ├── setup-azure.sh                  # Azure resource setup
     └── test-connection.sh              # Connection testing
 ```
+
+## 🧪 Automated Testing with Azure Developer CLI (azd)
+
+This repository includes infrastructure-as-code for deploying a complete test environment using `azd`.
+
+### Deploy Test Environment
+
+```bash
+# Login to Azure
+azd auth login
+
+# Deploy everything (Redis + VM with all runtimes)
+azd up
+
+# Get connection info
+azd env get-values
+```
+
+### Run Tests on the VM
+
+```bash
+# SSH to the VM
+ssh azureuser@<vm-public-ip>
+
+# Clone examples and run tests
+git clone <this-repo> ~/redis-examples
+export AZURE_CLIENT_ID="<from azd outputs>"
+export REDIS_HOSTNAME="<from azd outputs>"
+./run-tests.sh all
+```
+
+See [infra/README.md](./infra/README.md) for detailed instructions.
 
 ## 🚀 Quick Start
 

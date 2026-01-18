@@ -6,8 +6,8 @@
  * 
  * Requirements:
  * - Node.js 18+
- * - @redis/client
- * - @redis/entraid
+ * - redis (node-redis)
+ * - @azure/identity
  * 
  * Environment Variables:
  * - AZURE_CLIENT_ID: Client ID of the user-assigned managed identity
@@ -18,15 +18,19 @@
  * managed identity assigned.
  */
 
-import { createClient } from '@redis/client';
-import { EntraIdCredentialsProviderFactory } from '@redis/entraid';
+import { createClient } from 'redis';
+import { ManagedIdentityCredential } from '@azure/identity';
 
 // Load configuration from environment
 const config = {
   clientId: process.env.AZURE_CLIENT_ID,
+  principalId: process.env.PRINCIPAL_ID || '', // Object ID for AUTH username
   redisHost: process.env.REDIS_HOSTNAME,
   redisPort: parseInt(process.env.REDIS_PORT || '10000', 10)
 };
+
+// Redis scope for Entra ID
+const REDIS_SCOPE = 'https://redis.azure.com/.default';
 
 // Validate configuration
 function validateConfig() {
@@ -43,6 +47,18 @@ function validateConfig() {
   }
 }
 
+// Extract OID from JWT token for use as username
+function extractOidFromToken(token) {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
+    return payload.oid;
+  } catch {
+    return null;
+  }
+}
+
 async function main() {
   validateConfig();
 
@@ -53,81 +69,90 @@ async function main() {
   let client;
   
   try {
-    // Create credentials provider for user-assigned managed identity
-    console.log('1. Creating credentials provider...');
-    const provider = EntraIdCredentialsProviderFactory.createForUserAssignedManagedIdentity({
-      clientId: config.clientId,
-      userAssignedClientId: config.clientId,
-      tokenManagerConfig: {
-        expirationRefreshRatio: 0.8, // Refresh at 80% of token lifetime
-        retry: {
-          maxAttempts: 3,
-          initialDelayMs: 100,
-          maxDelayMs: 1000,
-          backoffMultiplier: 2
-        }
-      }
-    });
-    console.log(`   ✅ Credentials provider created for: ${config.clientId.substring(0, 8)}...\n`);
+    // Create managed identity credential
+    console.log('1. Creating managed identity credential...');
+    const credential = new ManagedIdentityCredential(config.clientId);
+    console.log(`   ✅ Credential created for: ${config.clientId.substring(0, 8)}...\n`);
 
-    // Create Redis client
-    console.log('2. Creating Redis client...');
+    // Get initial token to extract OID for username
+    console.log('2. Acquiring initial token...');
+    const tokenResponse = await credential.getToken(REDIS_SCOPE);
+    if (!tokenResponse) {
+      throw new Error('Failed to acquire token');
+    }
+    const oid = extractOidFromToken(tokenResponse.token);
+    console.log(`   ✅ Token acquired, OID: ${oid || 'unknown'}`);
+    console.log(`   Token expires: ${new Date(tokenResponse.expiresOnTimestamp).toISOString()}\n`);
+
+    // Create Redis client with Entra ID auth
+    console.log('3. Creating Redis client...');
     const redisUrl = `rediss://${config.redisHost}:${config.redisPort}`;
+    
     client = createClient({
       url: redisUrl,
-      credentialsProvider: provider
+      username: oid || config.principalId,
+      password: tokenResponse.token,
+      socket: {
+        tls: true,
+        servername: config.redisHost
+      }
     });
+
+    // Handle errors
+    client.on('error', (err) => console.error('Redis Client Error:', err));
+    
     console.log(`   ✅ Client configured for ${redisUrl}\n`);
 
     // Connect
-    console.log('3. Connecting to Redis...');
+    console.log('4. Connecting to Redis...');
     await client.connect();
     console.log('   ✅ Connected!\n');
 
     // Test PING
-    console.log('4. Testing PING...');
+    console.log('5. Testing PING...');
     const pong = await client.ping();
     console.log(`   ✅ PING response: ${pong}\n`);
 
     // Test SET
-    console.log('5. Testing SET operation...');
+    console.log('6. Testing SET operation...');
     const testKey = `nodejs-entra-test:${new Date().toISOString()}`;
     const testValue = 'Hello from Node.js with Entra ID auth!';
     await client.set(testKey, testValue, { EX: 60 }); // Expires in 60 seconds
     console.log(`   ✅ SET '${testKey}'\n`);
 
     // Test GET
-    console.log('6. Testing GET operation...');
+    console.log('7. Testing GET operation...');
     const retrieved = await client.get(testKey);
     console.log(`   ✅ GET '${testKey}' = '${retrieved}'\n`);
 
-    // Test INCR
-    console.log('7. Testing INCR operation...');
-    const counterKey = 'nodejs-counter';
-    const newValue = await client.incr(counterKey);
-    console.log(`   ✅ INCR '${counterKey}' = ${newValue}\n`);
+    // Server info
+    console.log('8. Getting server info...');
+    const info = await client.info('server');
+    const versionMatch = info.match(/redis_version:(.+)/);
+    console.log(`   Redis Version: ${versionMatch ? versionMatch[1].trim() : 'unknown'}\n`);
 
-    // Test DBSIZE
-    console.log('8. Getting database size...');
-    const dbSize = await client.dbSize();
-    console.log(`   Database contains ${dbSize} keys\n`);
-
-    // Cleanup
+    // Clean up
     console.log('9. Cleaning up test key...');
     await client.del(testKey);
     console.log(`   ✅ Deleted '${testKey}'\n`);
 
     console.log('='.repeat(60));
     console.log('DEMO COMPLETE - All operations successful!');
-    console.log('='.repeat(60));
+    console.log('='.repeat(60) + '\n');
 
   } catch (error) {
     console.error('\n❌ Error:', error.message);
-    console.error(error.stack);
+    if (error.code) {
+      console.error(`   Error code: ${error.code}`);
+    }
+    console.error('\nTroubleshooting tips:');
+    console.error('1. Ensure you are running on an Azure resource with managed identity');
+    console.error('2. Verify the managed identity has an access policy on the Redis cache');
+    console.error('3. Check that AZURE_CLIENT_ID matches your user-assigned managed identity');
     process.exit(1);
   } finally {
     if (client) {
-      await client.disconnect();
+      await client.quit();
     }
   }
 }

@@ -1,8 +1,8 @@
 package com.example;
 
 import redis.clients.authentication.entraid.EntraIDTokenAuthConfigBuilder;
-import redis.clients.authentication.core.TokenBasedRedisCredentialsProvider;
-import redis.clients.authentication.entraid.UserManagedIdentityType;
+import redis.clients.authentication.entraid.ManagedIdentityInfo;
+import io.lettuce.authx.TokenBasedRedisCredentialsProvider;
 import io.lettuce.core.*;
 import io.lettuce.core.api.StatefulRedisConnection;
 import io.lettuce.core.api.sync.RedisCommands;
@@ -10,12 +10,15 @@ import io.lettuce.core.codec.StringCodec;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Set;
 
 /**
  * Azure Managed Redis - Managed Identity Authentication Example (Lettuce)
  * 
  * This example demonstrates how to connect to Azure Managed Redis using
  * a User-Assigned Managed Identity with Entra ID authentication.
+ * 
+ * Requires Lettuce 6.6.0+ and redis-authx-entraid 0.1.1-beta2+
  * 
  * Environment Variables:
  * - AZURE_CLIENT_ID: Client ID of the user-assigned managed identity
@@ -25,6 +28,10 @@ import java.time.format.DateTimeFormatter;
 public class ManagedIdentityExample {
     
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    
+    // Azure Redis scope for OAuth token requests  
+    // Use the Redis app ID with /.default for managed identity tokens
+    private static final String REDIS_SCOPE = "https://redis.azure.com";
 
     public static void main(String[] args) {
         // Load configuration
@@ -50,13 +57,16 @@ public class ManagedIdentityExample {
         RedisClient redisClient = null;
 
         try {
-            // Create Entra ID credentials provider
+            // Create Entra ID credentials provider using User-Assigned Managed Identity
             System.out.println("1. Creating credentials provider...");
             try (EntraIDTokenAuthConfigBuilder builder = EntraIDTokenAuthConfigBuilder.builder()) {
+                // Configure for user-assigned managed identity using client ID
                 builder.userAssignedManagedIdentity(
-                    UserManagedIdentityType.CLIENT_ID,
+                    ManagedIdentityInfo.UserManagedIdentityType.CLIENT_ID,
                     clientId
                 );
+                // Set the required scopes for Azure Redis
+                builder.scopes(Set.of(REDIS_SCOPE));
                 credentials = TokenBasedRedisCredentialsProvider.create(builder.build());
             }
             System.out.println("   ✅ Credentials provider created for: " + clientId.substring(0, 8) + "...\n");
@@ -69,11 +79,15 @@ public class ManagedIdentityExample {
                 .block();
 
             // Enable automatic re-authentication
+            // Following Azure Best Practices: https://github.com/Azure/AzureCacheForRedis/blob/main/Lettuce%20Best%20Practices.md
             System.out.println("3. Creating client options with auto re-authentication...");
             ClientOptions clientOptions = ClientOptions.builder()
                 .reauthenticateBehavior(ClientOptions.ReauthenticateBehavior.ON_NEW_CREDENTIALS)
+                .socketOptions(io.lettuce.core.SocketOptions.builder()
+                    .keepAlive(true)  // Required for Azure - keeps connections alive
+                    .build())
                 .build();
-            System.out.println("   ✅ Auto re-authentication enabled\n");
+            System.out.println("   ✅ Auto re-authentication enabled, keepAlive=true\n");
 
             // Build Redis URI
             System.out.println("4. Building Redis URI...");
