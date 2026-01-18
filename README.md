@@ -16,15 +16,37 @@ This repository provides:
 
 ## 📚 Supported Languages & Client Libraries
 
+### ✅ Implemented
+
 | Language | Client Library | Entra ID Package | Cluster Policy Support |
 |----------|---------------|------------------|------------------------|
 | [Python](./examples/python/) | redis-py 5.0+ | redis-entraid 1.1+ | ✅ Enterprise & OSS Cluster |
-| [Java (Jedis)](./examples/java-jedis/) | Jedis 5.2+ | redis-authx-entraid 0.1.1-beta2 | ✅ Enterprise |
+| [Java (Jedis)](./examples/java-jedis/) | Jedis 7.2+ | redis-authx-entraid 0.1.1-beta2 | ✅ Enterprise |
 | [Java (Lettuce)](./examples/java-lettuce/) | Lettuce 6.8+ | redis-authx-entraid 0.1.1-beta2 | ✅ Enterprise & OSS Cluster |
 | [Java (Lettuce + Spring Boot)](./examples/java-lettuce-springboot/) | Lettuce + Spring Boot | redis-authx-entraid | ✅ Enterprise & OSS Cluster |
 | [Node.js](./examples/nodejs/) | node-redis 5.0+ | @azure/identity 4.5+ | ✅ Enterprise & OSS Cluster |
 | [Go](./examples/go/) | go-redis v9 | go-redis-entraid v1.0 | ✅ Enterprise & OSS Cluster |
 | [.NET/C#](./examples/dotnet/) | StackExchange.Redis 2.8+ | Microsoft.Azure.StackExchangeRedis 3.2+ | ✅ Enterprise & OSS Cluster |
+
+### 🚧 Planned (Not Yet Implemented)
+
+The following languages are supported by Redis but examples are not yet available in this repository:
+
+| Language | Client Library | Status |
+|----------|---------------|--------|
+| Java (Redisson) | Redisson | 📋 Planned |
+| Ruby | redis-rb | 📋 Planned |
+| PHP | Predis / phpredis | 📋 Planned |
+| Rust | redis-rs | 📋 Planned |
+| C/C++ | hiredis | 📋 Planned |
+| Scala | scala-redis | 📋 Planned |
+| Kotlin | Lettuce (via Java) | 📋 Planned |
+| Swift | RediStack | 📋 Planned |
+| Perl | Redis::Fast | 📋 Planned |
+| R | redux | 📋 Planned |
+| Lua | lua-resty-redis | 📋 Planned |
+
+> 💡 **Contributions welcome!** If you'd like to contribute an example for one of the planned languages, please open a pull request.
 
 > **Cluster Policy Support:** All examples auto-detect the `REDIS_CLUSTER_POLICY` environment variable and use the appropriate client (standard vs cluster-aware with address remapping for OSS Cluster).
 

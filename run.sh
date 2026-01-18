@@ -248,6 +248,7 @@ run_jedis() {
         export AZURE_CLIENT_ID='$AZURE_CLIENT_ID' && \
         export REDIS_HOSTNAME='$REDIS_HOSTNAME' && \
         export REDIS_PORT='$REDIS_PORT' && \
+        export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
         mvn compile -q && \
         mvn exec:java -Dexec.mainClass='com.example.ManagedIdentityExample' -q 2>&1"
 }
@@ -341,6 +342,19 @@ run_all() {
     else
         results+=("Go: ❌ FAILED")
         ((failed++))
+    fi
+    
+    # Java Jedis (Enterprise policy only for now)
+    if [ "$REDIS_CLUSTER_POLICY" != "OSSCluster" ]; then
+        if run_jedis; then
+            results+=("Java Jedis: ✅ PASSED")
+            ((passed++))
+        else
+            results+=("Java Jedis: ❌ FAILED")
+            ((failed++))
+        fi
+    else
+        results+=("Java Jedis: ⏭️ SKIPPED (no OSS Cluster support)")
     fi
     
     # Summary

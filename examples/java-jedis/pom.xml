@@ -16,7 +16,7 @@
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <jedis.version>5.2.0</jedis.version>
+        <jedis.version>7.2.1</jedis.version>
         <redis-authx.version>0.1.1-beta2</redis-authx.version>
     </properties>
 

@@ -3,6 +3,7 @@ package com.example;
 import redis.clients.authentication.entraid.EntraIDTokenAuthConfigBuilder;
 import redis.clients.authentication.core.TokenAuthConfig;
 import redis.clients.jedis.*;
+import redis.clients.jedis.authentication.AuthXManager;
 import redis.clients.jedis.exceptions.JedisException;
 
 import java.time.LocalDateTime;
@@ -22,8 +23,8 @@ import java.util.Set;
  * 
  * Requirements:
  * - Java 17+
- * - Jedis 5.x
- * - redis-authx-entraid
+ * - Jedis 5.2+
+ * - redis-authx-entraid 0.1.1-beta2
  * 
  * Environment Variables:
  * - AZURE_CLIENT_ID: Application (client) ID of the service principal
@@ -88,19 +89,22 @@ public class ServicePrincipalExample {
 
             // Create Jedis client configuration with authentication
             System.out.println("2. Creating Jedis client configuration...");
+            AuthXManager authXManager = new AuthXManager(authConfig);
+            
             JedisClientConfig config = DefaultJedisClientConfig.builder()
-                .authXManager(new AuthXManager(authConfig))
+                .authXManager(authXManager)
                 .ssl(true)
                 .connectionTimeoutMillis(10000)
                 .socketTimeoutMillis(10000)
                 .build();
             System.out.println("   ✅ Client config created with SSL enabled\n");
 
-            // Connect to Redis
+            // Connect to Redis using RedisClient (recommended over deprecated JedisPooled)
             System.out.println("3. Connecting to Redis at " + redisHost + ":" + redisPort + "...");
-            try (JedisPooled jedis = new JedisPooled(
-                    new HostAndPort(redisHost, redisPort), 
-                    config)) {
+            try (RedisClient jedis = RedisClient.builder()
+                    .hostAndPort(new HostAndPort(redisHost, redisPort))
+                    .clientConfig(config)
+                    .build()) {
                 
                 // Test PING
                 System.out.println("\n4. Testing PING...");

@@ -12,7 +12,7 @@ Add to your `pom.xml`:
     <dependency>
         <groupId>redis.clients</groupId>
         <artifactId>jedis</artifactId>
-        <version>5.2.0</version>
+        <version>7.2.1</version>
     </dependency>
     
     <!-- Entra ID Authentication for Jedis -->
@@ -28,7 +28,7 @@ Or for Gradle (`build.gradle`):
 
 ```groovy
 dependencies {
-    implementation 'redis.clients:jedis:5.2.0'
+    implementation 'redis.clients:jedis:7.2.1'
     implementation 'redis.clients.authentication:redis-authx-entraid:0.1.1-beta2'
 }
 ```
@@ -40,24 +40,30 @@ dependencies {
 ```java
 import redis.clients.authentication.entraid.EntraIDTokenAuthConfigBuilder;
 import redis.clients.authentication.core.TokenAuthConfig;
-import redis.clients.authentication.entraid.UserManagedIdentityType;
+import redis.clients.authentication.entraid.ManagedIdentityInfo.UserManagedIdentityType;
 import redis.clients.jedis.*;
+import redis.clients.jedis.authentication.AuthXManager;
+import java.util.Set;
 
 TokenAuthConfig authConfig = EntraIDTokenAuthConfigBuilder.builder()
     .userAssignedManagedIdentity(
         UserManagedIdentityType.CLIENT_ID,
         System.getenv("AZURE_CLIENT_ID")
     )
+    .scopes(Set.of("https://redis.azure.com"))
     .build();
 
+AuthXManager authXManager = new AuthXManager(authConfig);
+
 JedisClientConfig config = DefaultJedisClientConfig.builder()
-    .authXManager(new AuthXManager(authConfig))
+    .authXManager(authXManager)
     .ssl(true)
     .build();
 
-try (JedisPooled jedis = new JedisPooled(
-        new HostAndPort("your-redis.region.redis.azure.net", 10000), 
-        config)) {
+try (RedisClient jedis = RedisClient.builder()
+        .hostAndPort(new HostAndPort("your-redis.region.redis.azure.net", 10000))
+        .clientConfig(config)
+        .build()) {
     System.out.println("PING: " + jedis.ping());
 }
 ```
@@ -67,6 +73,7 @@ try (JedisPooled jedis = new JedisPooled(
 ```java
 TokenAuthConfig authConfig = EntraIDTokenAuthConfigBuilder.builder()
     .systemAssignedManagedIdentity()
+    .scopes(Set.of("https://redis.azure.com"))
     .build();
 ```
 
@@ -79,6 +86,25 @@ TokenAuthConfig authConfig = EntraIDTokenAuthConfigBuilder.builder()
     .authority("https://login.microsoftonline.com/" + System.getenv("AZURE_TENANT_ID"))
     .scopes(Set.of("https://redis.azure.com/.default"))
     .build();
+```
+
+## 🌐 Cluster Policy Support
+
+Azure Managed Redis supports two cluster policies:
+
+### EnterpriseCluster (Default)
+Standard Redis client works - server handles slot routing internally.
+
+### OSSCluster
+Requires cluster-aware client using `RedisClusterClient`:
+
+```java
+try (RedisClusterClient jedis = RedisClusterClient.builder()
+        .nodes(Collections.singleton(new HostAndPort(redisHost, redisPort)))
+        .clientConfig(config)
+        .build()) {
+    System.out.println("PING: " + jedis.ping());
+}
 ```
 
 ## 📁 Project Structure
