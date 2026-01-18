@@ -205,14 +205,22 @@ With OSS cluster policy, Redis uses the `CLUSTER NODES` command to inform client
 You **must** configure a `MappingSocketAddressResolver` (in Lettuce) or similar mechanism to:
 1. Map internal cluster IPs back to the public hostname
 2. Ensure SSL certificate validation works (cert is for public hostname)
+3. Use `DnsResolvers.UNRESOLVED` for proper SNI (Server Name Indication)
 
 ```java
 // Java Lettuce Example - Required for OSS Cluster
+// CRITICAL: Use DnsResolvers.UNRESOLVED, not JVM_DEFAULT!
 MappingSocketAddressResolver resolver = MappingSocketAddressResolver.create(
-    DnsResolvers.UNRESOLVED,
+    DnsResolvers.UNRESOLVED,  // Allows hostname to be preserved for SNI
     hostAndPort -> HostAndPort.of(publicHostName, hostAndPort.getPort())
 );
 ```
+
+**Why `DnsResolvers.UNRESOLVED` is critical:**
+- With `UNRESOLVED`, Lettuce creates an InetSocketAddress with the hostname string
+- Netty uses this hostname for SNI during TLS handshake  
+- The SSL certificate validates because SNI hostname matches the certificate SAN
+- Using `JVM_DEFAULT` resolves to IP, breaking SNI hostname verification
 
 **Lettuce Configuration Requirements for OSS Cluster:**
 ```java
@@ -407,15 +415,24 @@ ntpq -p
 
 ### 5. "Connection refused to 10.x.x.x addresses"
 
-**Cluster IP Mapping Issue:** With OSS cluster policy, Redis advertises internal IPs that aren't reachable.
+**Cluster IP Mapping Issue:** With OSS cluster policy, Redis advertises internal IPs that aren't directly reachable.
 
-**Fix:** Configure `MappingSocketAddressResolver` (Lettuce) or `natMap` (ioredis) to map internal IPs back to the public hostname.
+**Fix:** Configure `MappingSocketAddressResolver` (Lettuce) or `natMap` (ioredis) to map internal IPs back to the public hostname. The traffic still goes through the Azure proxy which routes to the correct internal node.
 
 ### 6. "SSL certificate validation fails"
 
 When connecting to internal cluster IPs, the SSL cert won't match (it's issued for the public hostname).
 
-**Fix:** Always connect via the public hostname. Use socket address mapping instead of connecting directly to internal IPs.
+**Root Cause:** Using `DnsResolvers.JVM_DEFAULT` resolves the hostname to an IP, breaking SNI.
+
+**Fix:** Use `DnsResolvers.UNRESOLVED` with MappingSocketAddressResolver:
+```java
+MappingSocketAddressResolver.create(
+    DnsResolvers.UNRESOLVED,  // CRITICAL: Don't pre-resolve DNS
+    hostAndPort -> HostAndPort.of(publicHostName, hostAndPort.getPort())
+);
+```
+This preserves the hostname for SNI during TLS handshake.
 
 ### 7. "MOVED errors in cluster mode"
 

@@ -1,0 +1,854 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.39.26.7824",
+      "templateHash": "1115276801817009842"
+    }
+  },
+  "parameters": {
+    "environmentName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "metadata": {
+        "description": "Name of the environment (used for resource naming)"
+      }
+    },
+    "location": {
+      "type": "string",
+      "minLength": 1,
+      "metadata": {
+        "description": "Primary location for all resources"
+      }
+    },
+    "redisSku": {
+      "type": "string",
+      "defaultValue": "Balanced_B5",
+      "allowedValues": [
+        "Balanced_B5",
+        "Balanced_B10",
+        "Balanced_B20",
+        "MemoryOptimized_M10",
+        "MemoryOptimized_M20",
+        "MemoryOptimized_M50",
+        "ComputeOptimized_X5",
+        "ComputeOptimized_X10"
+      ],
+      "metadata": {
+        "description": "Azure Managed Redis SKU"
+      }
+    },
+    "redisClusterPolicy": {
+      "type": "string",
+      "defaultValue": "EnterpriseCluster",
+      "allowedValues": [
+        "OSSCluster",
+        "EnterpriseCluster"
+      ],
+      "metadata": {
+        "description": "Redis cluster policy: OSSCluster (for cluster-aware clients) or EnterpriseCluster (single endpoint proxy)"
+      }
+    },
+    "vmAdminUsername": {
+      "type": "string",
+      "defaultValue": "azureuser",
+      "metadata": {
+        "description": "VM admin username"
+      }
+    },
+    "vmAdminPassword": {
+      "type": "securestring",
+      "metadata": {
+        "description": "VM admin password or SSH key"
+      }
+    },
+    "existingManagedIdentityPrincipalId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional: Existing managed identity principal ID to grant access (skips identity creation)"
+      }
+    },
+    "existingManagedIdentityClientId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional: Existing managed identity client ID"
+      }
+    },
+    "existingManagedIdentityId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional: Existing managed identity resource ID"
+      }
+    }
+  },
+  "variables": {
+    "$fxv#0": {
+      "managedIdentityUserAssignedIdentities": "id-",
+      "networkVirtualNetworks": "vnet-",
+      "networkNetworkSecurityGroups": "nsg-",
+      "networkPublicIPAddresses": "pip-",
+      "networkNetworkInterfaces": "nic-",
+      "computeVirtualMachines": "vm-",
+      "cacheRedis": "redis-"
+    },
+    "tags": {
+      "azd-env-name": "[parameters('environmentName')]",
+      "purpose": "redis-entra-id-testing",
+      "clusterPolicy": "[parameters('redisClusterPolicy')]"
+    },
+    "abbrs": "[variables('$fxv#0')]",
+    "resourceToken": "[toLower(uniqueString(subscription().id, parameters('environmentName'), parameters('location')))]",
+    "useExistingIdentity": "[not(empty(parameters('existingManagedIdentityPrincipalId')))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Resources/resourceGroups",
+      "apiVersion": "2022-09-01",
+      "name": "[format('rg-{0}', parameters('environmentName'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]"
+    },
+    {
+      "condition": "[not(variables('useExistingIdentity'))]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "managed-identity",
+      "resourceGroup": "[format('rg-{0}', parameters('environmentName'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "name": {
+            "value": "[format('{0}{1}', variables('abbrs').managedIdentityUserAssignedIdentities, variables('resourceToken'))]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.39.26.7824",
+              "templateHash": "2785196517716660763"
+            }
+          },
+          "parameters": {
+            "name": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the managed identity"
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Location for the resource"
+              }
+            },
+            "tags": {
+              "type": "object",
+              "metadata": {
+                "description": "Tags for the resource"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+              "apiVersion": "2023-01-31",
+              "name": "[parameters('name')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]"
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('name'))]"
+            },
+            "name": {
+              "type": "string",
+              "value": "[parameters('name')]"
+            },
+            "clientId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('name')), '2023-01-31').clientId]"
+            },
+            "principalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('name')), '2023-01-31').principalId]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', format('rg-{0}', parameters('environmentName')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "vnet",
+      "resourceGroup": "[format('rg-{0}', parameters('environmentName'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "name": {
+            "value": "[format('{0}{1}', variables('abbrs').networkVirtualNetworks, variables('resourceToken'))]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.39.26.7824",
+              "templateHash": "9747089620556442240"
+            }
+          },
+          "parameters": {
+            "name": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the VNet"
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Location for the resource"
+              }
+            },
+            "tags": {
+              "type": "object",
+              "metadata": {
+                "description": "Tags for the resource"
+              }
+            }
+          },
+          "variables": {
+            "addressPrefix": "10.0.0.0/16"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Network/virtualNetworks",
+              "apiVersion": "2023-05-01",
+              "name": "[parameters('name')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "addressSpace": {
+                  "addressPrefixes": [
+                    "[variables('addressPrefix')]"
+                  ]
+                },
+                "subnets": [
+                  {
+                    "name": "vm-subnet",
+                    "properties": {
+                      "addressPrefix": "10.0.1.0/24",
+                      "networkSecurityGroup": {
+                        "id": "[resourceId('Microsoft.Network/networkSecurityGroups', format('{0}-vm-nsg', parameters('name')))]"
+                      }
+                    }
+                  },
+                  {
+                    "name": "redis-subnet",
+                    "properties": {
+                      "addressPrefix": "10.0.2.0/24",
+                      "privateEndpointNetworkPolicies": "Disabled"
+                    }
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/networkSecurityGroups', format('{0}-vm-nsg', parameters('name')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/networkSecurityGroups",
+              "apiVersion": "2023-05-01",
+              "name": "[format('{0}-vm-nsg', parameters('name'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "securityRules": [
+                  {
+                    "name": "AllowSSH",
+                    "properties": {
+                      "priority": 100,
+                      "direction": "Inbound",
+                      "access": "Allow",
+                      "protocol": "Tcp",
+                      "sourcePortRange": "*",
+                      "destinationPortRange": "22",
+                      "sourceAddressPrefix": "*",
+                      "destinationAddressPrefix": "*"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Network/virtualNetworks', parameters('name'))]"
+            },
+            "name": {
+              "type": "string",
+              "value": "[parameters('name')]"
+            },
+            "vmSubnetId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Network/virtualNetworks', parameters('name')), '2023-05-01').subnets[0].id]"
+            },
+            "redisSubnetId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Network/virtualNetworks', parameters('name')), '2023-05-01').subnets[1].id]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', format('rg-{0}', parameters('environmentName')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "redis",
+      "resourceGroup": "[format('rg-{0}', parameters('environmentName'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "name": {
+            "value": "[format('{0}{1}', variables('abbrs').cacheRedis, variables('resourceToken'))]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          },
+          "sku": {
+            "value": "[parameters('redisSku')]"
+          },
+          "clusterPolicy": {
+            "value": "[parameters('redisClusterPolicy')]"
+          },
+          "subnetId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'vnet'), '2025-04-01').outputs.redisSubnetId.value]"
+          },
+          "managedIdentityPrincipalId": "[if(variables('useExistingIdentity'), createObject('value', parameters('existingManagedIdentityPrincipalId')), createObject('value', reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'managed-identity'), '2025-04-01').outputs.principalId.value))]",
+          "managedIdentityClientId": "[if(variables('useExistingIdentity'), createObject('value', parameters('existingManagedIdentityClientId')), createObject('value', reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'managed-identity'), '2025-04-01').outputs.clientId.value))]"
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.39.26.7824",
+              "templateHash": "882242642430390651"
+            }
+          },
+          "parameters": {
+            "name": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Redis cache"
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Location for the resource"
+              }
+            },
+            "tags": {
+              "type": "object",
+              "metadata": {
+                "description": "Tags for the resource"
+              }
+            },
+            "sku": {
+              "type": "string",
+              "allowedValues": [
+                "Balanced_B5",
+                "Balanced_B10",
+                "Balanced_B20",
+                "MemoryOptimized_M10",
+                "MemoryOptimized_M20",
+                "MemoryOptimized_M50",
+                "ComputeOptimized_X5",
+                "ComputeOptimized_X10"
+              ],
+              "metadata": {
+                "description": "SKU for Azure Managed Redis"
+              }
+            },
+            "clusterPolicy": {
+              "type": "string",
+              "allowedValues": [
+                "OSSCluster",
+                "EnterpriseCluster"
+              ],
+              "metadata": {
+                "description": "Cluster policy: OSSCluster or EnterpriseCluster"
+              }
+            },
+            "subnetId": {
+              "type": "string",
+              "metadata": {
+                "description": "Subnet ID for private endpoint"
+              }
+            },
+            "managedIdentityPrincipalId": {
+              "type": "string",
+              "metadata": {
+                "description": "Principal ID of the managed identity for access policy"
+              }
+            },
+            "managedIdentityClientId": {
+              "type": "string",
+              "metadata": {
+                "description": "Client ID of the managed identity (for alias)"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Cache/redisEnterprise",
+              "apiVersion": "2024-09-01-preview",
+              "name": "[parameters('name')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "[parameters('sku')]"
+              },
+              "properties": {
+                "minimumTlsVersion": "1.2"
+              }
+            },
+            {
+              "type": "Microsoft.Cache/redisEnterprise/databases",
+              "apiVersion": "2024-09-01-preview",
+              "name": "[format('{0}/{1}', parameters('name'), 'default')]",
+              "properties": {
+                "clientProtocol": "Encrypted",
+                "port": 10000,
+                "clusteringPolicy": "[parameters('clusterPolicy')]",
+                "evictionPolicy": "NoEviction",
+                "accessKeysAuthentication": "Disabled"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Cache/redisEnterprise', parameters('name'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Cache/redisEnterprise/databases/accessPolicyAssignments",
+              "apiVersion": "2024-09-01-preview",
+              "name": "[format('{0}/{1}/{2}', parameters('name'), 'default', 'managed-identity-access')]",
+              "properties": {
+                "accessPolicyName": "default",
+                "user": {
+                  "objectId": "[parameters('managedIdentityPrincipalId')]"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Cache/redisEnterprise/databases', parameters('name'), 'default')]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/privateEndpoints",
+              "apiVersion": "2023-05-01",
+              "name": "[format('{0}-pe', parameters('name'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "subnet": {
+                  "id": "[parameters('subnetId')]"
+                },
+                "privateLinkServiceConnections": [
+                  {
+                    "name": "[format('{0}-pe-connection', parameters('name'))]",
+                    "properties": {
+                      "privateLinkServiceId": "[resourceId('Microsoft.Cache/redisEnterprise', parameters('name'))]",
+                      "groupIds": [
+                        "redisEnterprise"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Cache/redisEnterprise', parameters('name'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/privateDnsZones",
+              "apiVersion": "2020-06-01",
+              "name": "[format('privatelink.{0}.redis.azure.net', parameters('location'))]",
+              "location": "global",
+              "tags": "[parameters('tags')]"
+            },
+            {
+              "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+              "apiVersion": "2020-06-01",
+              "name": "[format('{0}/{1}', format('privatelink.{0}.redis.azure.net', parameters('location')), format('{0}-dns-link', parameters('name')))]",
+              "location": "global",
+              "properties": {
+                "registrationEnabled": false,
+                "virtualNetwork": {
+                  "id": "[substring(parameters('subnetId'), 0, lastIndexOf(parameters('subnetId'), '/subnets/'))]"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.{0}.redis.azure.net', parameters('location')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+              "apiVersion": "2023-05-01",
+              "name": "[format('{0}/{1}', format('{0}-pe', parameters('name')), 'default')]",
+              "properties": {
+                "privateDnsZoneConfigs": [
+                  {
+                    "name": "config",
+                    "properties": {
+                      "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.{0}.redis.azure.net', parameters('location')))]"
+                    }
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.{0}.redis.azure.net', parameters('location')))]",
+                "[resourceId('Microsoft.Network/privateEndpoints', format('{0}-pe', parameters('name')))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Cache/redisEnterprise', parameters('name'))]"
+            },
+            "name": {
+              "type": "string",
+              "value": "[parameters('name')]"
+            },
+            "hostname": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Cache/redisEnterprise', parameters('name')), '2024-09-01-preview').hostName]"
+            },
+            "port": {
+              "type": "int",
+              "value": "[reference(resourceId('Microsoft.Cache/redisEnterprise/databases', parameters('name'), 'default'), '2024-09-01-preview').port]"
+            },
+            "clusterPolicy": {
+              "type": "string",
+              "value": "[parameters('clusterPolicy')]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'managed-identity')]",
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', format('rg-{0}', parameters('environmentName')))]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'vnet')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "vm",
+      "resourceGroup": "[format('rg-{0}', parameters('environmentName'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "name": {
+            "value": "[format('{0}{1}', variables('abbrs').computeVirtualMachines, variables('resourceToken'))]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          },
+          "subnetId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'vnet'), '2025-04-01').outputs.vmSubnetId.value]"
+          },
+          "adminUsername": {
+            "value": "[parameters('vmAdminUsername')]"
+          },
+          "adminPassword": {
+            "value": "[parameters('vmAdminPassword')]"
+          },
+          "managedIdentityId": "[if(variables('useExistingIdentity'), createObject('value', parameters('existingManagedIdentityId')), createObject('value', reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'managed-identity'), '2025-04-01').outputs.id.value))]"
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.39.26.7824",
+              "templateHash": "10426274018558003434"
+            }
+          },
+          "parameters": {
+            "name": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the VM"
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Location for the resource"
+              }
+            },
+            "tags": {
+              "type": "object",
+              "metadata": {
+                "description": "Tags for the resource"
+              }
+            },
+            "subnetId": {
+              "type": "string",
+              "metadata": {
+                "description": "Subnet ID for the VM"
+              }
+            },
+            "adminUsername": {
+              "type": "string",
+              "metadata": {
+                "description": "Admin username"
+              }
+            },
+            "adminPassword": {
+              "type": "securestring",
+              "metadata": {
+                "description": "Admin password"
+              }
+            },
+            "managedIdentityId": {
+              "type": "string",
+              "metadata": {
+                "description": "User-assigned managed identity ID"
+              }
+            }
+          },
+          "variables": {
+            "$fxv#0": "#!/bin/bash\n# Install all runtimes needed to test the Redis Entra ID examples\n# This script runs on the test VM during provisioning\n\nset -e\n\necho \"=== Starting runtime installation ===\"\n\n# Update package lists\napt-get update\n\n# ============================================\n# Python 3.11+ with pip\n# ============================================\necho \"Installing Python...\"\napt-get install -y python3 python3-pip python3-venv\npython3 --version\npip3 --version\n\n# ============================================\n# Node.js 20 LTS\n# ============================================\necho \"Installing Node.js 20...\"\ncurl -fsSL https://deb.nodesource.com/setup_20.x | bash -\napt-get install -y nodejs\nnode --version\nnpm --version\n\n# ============================================\n# .NET 8.0 SDK\n# ============================================\necho \"Installing .NET 8.0...\"\nwget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb -O packages-microsoft-prod.deb\ndpkg -i packages-microsoft-prod.deb\nrm packages-microsoft-prod.deb\napt-get update\napt-get install -y dotnet-sdk-8.0\ndotnet --version\n\n# ============================================\n# Java 17 (OpenJDK) + Maven\n# ============================================\necho \"Installing Java 17 and Maven...\"\napt-get install -y openjdk-17-jdk maven\njava --version\nmvn --version\n\n# ============================================\n# Go 1.22\n# ============================================\necho \"Installing Go...\"\nGO_VERSION=\"1.22.0\"\nwget \"https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz\"\nrm -rf /usr/local/go\ntar -C /usr/local -xzf \"go${GO_VERSION}.linux-amd64.tar.gz\"\nrm \"go${GO_VERSION}.linux-amd64.tar.gz\"\necho 'export PATH=$PATH:/usr/local/go/bin' >> /etc/profile.d/go.sh\nexport PATH=$PATH:/usr/local/go/bin\ngo version\n\n# ============================================\n# Git (for cloning the examples)\n# ============================================\necho \"Installing Git...\"\napt-get install -y git\n\n# ============================================\n# Additional utilities\n# ============================================\necho \"Installing additional utilities...\"\napt-get install -y curl jq unzip openssl net-tools dnsutils\n\n# ============================================\n# Azure CLI (for debugging/troubleshooting)\n# ============================================\necho \"Installing Azure CLI...\"\ncurl -sL https://aka.ms/InstallAzureCLIDeb | bash\n\n# ============================================\n# NTP for time synchronization (critical for Entra ID!)\n# ============================================\necho \"Configuring NTP time synchronization...\"\napt-get install -y chrony\nsystemctl enable chrony\nsystemctl start chrony\n\n# Verify time sync\nchronyc tracking\n\n# ============================================\n# Create test directory and clone examples\n# ============================================\necho \"Setting up test environment...\"\nmkdir -p /home/azureuser/redis-examples\nchown azureuser:azureuser /home/azureuser/redis-examples\n\n# Create helper script for running tests\ncat > /home/azureuser/run-tests.sh << 'EOF'\n#!/bin/bash\n# Helper script to run Redis Entra ID examples\n# Usage: ./run-tests.sh [python|nodejs|dotnet|java|go|all]\n\nset -e\n\nEXAMPLES_DIR=\"/home/azureuser/redis-examples\"\n\n# Check if AZURE_CLIENT_ID and REDIS_HOSTNAME are set\nif [ -z \"$AZURE_CLIENT_ID\" ] || [ -z \"$REDIS_HOSTNAME\" ]; then\n    echo \"Error: Please set environment variables:\"\n    echo \"  export AZURE_CLIENT_ID='your-managed-identity-client-id'\"\n    echo \"  export REDIS_HOSTNAME='your-redis.region.redisenterprise.cache.azure.net'\"\n    exit 1\nfi\n\nexport REDIS_PORT=\"${REDIS_PORT:-10000}\"\n\nrun_python() {\n    echo \"=== Running Python Example ===\"\n    cd \"$EXAMPLES_DIR/examples/python\"\n    python3 -m venv .venv\n    source .venv/bin/activate\n    pip install -r requirements.txt\n    python managed_identity_example.py\n    deactivate\n}\n\nrun_nodejs() {\n    echo \"=== Running Node.js Example ===\"\n    cd \"$EXAMPLES_DIR/examples/nodejs\"\n    npm install\n    node managed_identity_example.mjs\n}\n\nrun_dotnet() {\n    echo \"=== Running .NET Example ===\"\n    cd \"$EXAMPLES_DIR/examples/dotnet\"\n    dotnet run -- managed-identity\n}\n\nrun_java_lettuce() {\n    echo \"=== Running Java Lettuce Example ===\"\n    cd \"$EXAMPLES_DIR/examples/java-lettuce\"\n    mvn clean compile exec:java -Dexec.mainClass=\"com.example.ManagedIdentityExample\"\n}\n\nrun_java_lettuce_springboot() {\n    echo \"=== Running Java Lettuce Spring Boot Example ===\"\n    cd \"$EXAMPLES_DIR/examples/java-lettuce-springboot\"\n    mvn clean spring-boot:run\n}\n\nrun_java_jedis() {\n    echo \"=== Running Java Jedis Example ===\"\n    cd \"$EXAMPLES_DIR/examples/java-jedis\"\n    mvn clean compile exec:java -Dexec.mainClass=\"com.example.ManagedIdentityExample\"\n}\n\nrun_go() {\n    echo \"=== Running Go Example ===\"\n    cd \"$EXAMPLES_DIR/examples/go\"\n    go run managed_identity_example.go\n}\n\ncase \"${1:-all}\" in\n    python)     run_python ;;\n    nodejs)     run_nodejs ;;\n    dotnet)     run_dotnet ;;\n    java)       run_java_lettuce ;;\n    java-springboot) run_java_lettuce_springboot ;;\n    jedis)      run_java_jedis ;;\n    go)         run_go ;;\n    all)\n        run_python\n        run_nodejs\n        run_dotnet\n        run_java_lettuce\n        run_java_jedis\n        run_go\n        echo \"\"\n        echo \"=== ALL TESTS COMPLETED ===\"\n        ;;\n    *)\n        echo \"Usage: $0 [python|nodejs|dotnet|java|java-springboot|jedis|go|all]\"\n        exit 1\n        ;;\nesac\nEOF\n\nchmod +x /home/azureuser/run-tests.sh\nchown azureuser:azureuser /home/azureuser/run-tests.sh\n\n# ============================================\n# Create environment setup script\n# ============================================\ncat > /home/azureuser/setup-env.sh << 'EOF'\n#!/bin/bash\n# Source this file to set up environment variables for testing\n# Usage: source ./setup-env.sh\n\n# These values come from azd deployment outputs\nexport AZURE_CLIENT_ID=\"${AZURE_CLIENT_ID:-}\"\nexport REDIS_HOSTNAME=\"${REDIS_HOSTNAME:-}\"\nexport REDIS_PORT=\"${REDIS_PORT:-10000}\"\n\necho \"Environment variables set:\"\necho \"  AZURE_CLIENT_ID: $AZURE_CLIENT_ID\"\necho \"  REDIS_HOSTNAME: $REDIS_HOSTNAME\"\necho \"  REDIS_PORT: $REDIS_PORT\"\n\n# Verify time sync (critical for Entra ID!)\necho \"\"\necho \"Time synchronization status:\"\nchronyc tracking | grep -E \"Leap status|System time\"\nEOF\n\nchmod +x /home/azureuser/setup-env.sh\nchown azureuser:azureuser /home/azureuser/setup-env.sh\n\necho \"=== Runtime installation complete ===\"\necho \"\"\necho \"Installed versions:\"\necho \"  Python:  $(python3 --version)\"\necho \"  Node.js: $(node --version)\"\necho \"  .NET:    $(dotnet --version)\"\necho \"  Java:    $(java --version 2>&1 | head -1)\"\necho \"  Maven:   $(mvn --version | head -1)\"\necho \"  Go:      $(go version)\"\necho \"\"\necho \"To test, SSH to the VM and run:\"\necho \"  1. Clone examples: git clone <repo> /home/azureuser/redis-examples\"\necho \"  2. Set env vars: export AZURE_CLIENT_ID='...' REDIS_HOSTNAME='...'\"\necho \"  3. Run tests: ./run-tests.sh all\"\n"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Network/publicIPAddresses",
+              "apiVersion": "2023-05-01",
+              "name": "[format('{0}-pip', parameters('name'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "Standard"
+              },
+              "properties": {
+                "publicIPAllocationMethod": "Static"
+              }
+            },
+            {
+              "type": "Microsoft.Network/networkInterfaces",
+              "apiVersion": "2023-05-01",
+              "name": "[format('{0}-nic', parameters('name'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "ipConfigurations": [
+                  {
+                    "name": "ipconfig1",
+                    "properties": {
+                      "subnet": {
+                        "id": "[parameters('subnetId')]"
+                      },
+                      "privateIPAllocationMethod": "Dynamic",
+                      "publicIPAddress": {
+                        "id": "[resourceId('Microsoft.Network/publicIPAddresses', format('{0}-pip', parameters('name')))]"
+                      }
+                    }
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/publicIPAddresses', format('{0}-pip', parameters('name')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Compute/virtualMachines",
+              "apiVersion": "2023-07-01",
+              "name": "[parameters('name')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "identity": {
+                "type": "UserAssigned",
+                "userAssignedIdentities": {
+                  "[format('{0}', parameters('managedIdentityId'))]": {}
+                }
+              },
+              "properties": {
+                "hardwareProfile": {
+                  "vmSize": "Standard_D2s_v3"
+                },
+                "osProfile": {
+                  "computerName": "[parameters('name')]",
+                  "adminUsername": "[parameters('adminUsername')]",
+                  "adminPassword": "[parameters('adminPassword')]",
+                  "linuxConfiguration": {
+                    "disablePasswordAuthentication": false
+                  }
+                },
+                "storageProfile": {
+                  "imageReference": {
+                    "publisher": "Canonical",
+                    "offer": "0001-com-ubuntu-server-jammy",
+                    "sku": "22_04-lts-gen2",
+                    "version": "latest"
+                  },
+                  "osDisk": {
+                    "createOption": "FromImage",
+                    "managedDisk": {
+                      "storageAccountType": "Premium_LRS"
+                    }
+                  }
+                },
+                "networkProfile": {
+                  "networkInterfaces": [
+                    {
+                      "id": "[resourceId('Microsoft.Network/networkInterfaces', format('{0}-nic', parameters('name')))]"
+                    }
+                  ]
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/networkInterfaces', format('{0}-nic', parameters('name')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Compute/virtualMachines/extensions",
+              "apiVersion": "2023-07-01",
+              "name": "[format('{0}/{1}', parameters('name'), 'install-runtimes')]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "publisher": "Microsoft.Azure.Extensions",
+                "type": "CustomScript",
+                "typeHandlerVersion": "2.1",
+                "autoUpgradeMinorVersion": true,
+                "settings": {
+                  "script": "[base64(variables('$fxv#0'))]"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Compute/virtualMachines', parameters('name'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Compute/virtualMachines', parameters('name'))]"
+            },
+            "name": {
+              "type": "string",
+              "value": "[parameters('name')]"
+            },
+            "publicIpAddress": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Network/publicIPAddresses', format('{0}-pip', parameters('name'))), '2023-05-01').ipAddress]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'managed-identity')]",
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', format('rg-{0}', parameters('environmentName')))]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'vnet')]"
+      ]
+    }
+  ],
+  "outputs": {
+    "AZURE_RESOURCE_GROUP": {
+      "type": "string",
+      "value": "[format('rg-{0}', parameters('environmentName'))]"
+    },
+    "AZURE_LOCATION": {
+      "type": "string",
+      "value": "[parameters('location')]"
+    },
+    "REDIS_HOSTNAME": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'redis'), '2025-04-01').outputs.hostname.value]"
+    },
+    "REDIS_PORT": {
+      "type": "int",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'redis'), '2025-04-01').outputs.port.value]"
+    },
+    "REDIS_CLUSTER_POLICY": {
+      "type": "string",
+      "value": "[parameters('redisClusterPolicy')]"
+    },
+    "AZURE_MANAGED_IDENTITY_CLIENT_ID": {
+      "type": "string",
+      "value": "[if(variables('useExistingIdentity'), parameters('existingManagedIdentityClientId'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'managed-identity'), '2025-04-01').outputs.clientId.value)]"
+    },
+    "AZURE_MANAGED_IDENTITY_PRINCIPAL_ID": {
+      "type": "string",
+      "value": "[if(variables('useExistingIdentity'), parameters('existingManagedIdentityPrincipalId'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'managed-identity'), '2025-04-01').outputs.principalId.value)]"
+    },
+    "VM_NAME": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'vm'), '2025-04-01').outputs.name.value]"
+    },
+    "VM_PUBLIC_IP": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'vm'), '2025-04-01').outputs.publicIpAddress.value]"
+    },
+    "VM_ADMIN_USERNAME": {
+      "type": "string",
+      "value": "[parameters('vmAdminUsername')]"
+    },
+    "SSH_CONNECTION_STRING": {
+      "type": "string",
+      "value": "[format('ssh {0}@{1}', parameters('vmAdminUsername'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'vm'), '2025-04-01').outputs.publicIpAddress.value)]"
+    }
+  }
+}

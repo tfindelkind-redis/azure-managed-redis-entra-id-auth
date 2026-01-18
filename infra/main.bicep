@@ -9,12 +9,13 @@ param environmentName string
 @description('Primary location for all resources')
 param location string
 
-@description('Azure Managed Redis SKU - use Memory Optimized for Cluster OSS')
-@allowed(['MemoryOptimized_M10', 'MemoryOptimized_M20', 'MemoryOptimized_M50', 'MemoryOptimized_M100'])
-param redisSku string = 'MemoryOptimized_M10'
+@description('Azure Managed Redis SKU')
+@allowed(['Balanced_B5', 'Balanced_B10', 'Balanced_B20', 'MemoryOptimized_M10', 'MemoryOptimized_M20', 'MemoryOptimized_M50', 'ComputeOptimized_X5', 'ComputeOptimized_X10'])
+param redisSku string = 'Balanced_B5'
 
-@description('Enable cluster mode for Redis (Cluster OSS tier)')
-param enableClusterMode bool = true
+@description('Redis cluster policy: OSSCluster (for cluster-aware clients) or EnterpriseCluster (single endpoint proxy)')
+@allowed(['OSSCluster', 'EnterpriseCluster'])
+param redisClusterPolicy string = 'EnterpriseCluster'
 
 @description('VM admin username')
 param vmAdminUsername string = 'azureuser'
@@ -23,18 +24,28 @@ param vmAdminUsername string = 'azureuser'
 @secure()
 param vmAdminPassword string
 
-@description('Enable Service Principal authentication for local testing (creates a Service Principal)')
-param createServicePrincipal bool = true
+@description('Optional: Existing managed identity principal ID to grant access (skips identity creation)')
+param existingManagedIdentityPrincipalId string = ''
+
+@description('Optional: Existing managed identity client ID')
+param existingManagedIdentityClientId string = ''
+
+@description('Optional: Existing managed identity resource ID')
+param existingManagedIdentityId string = ''
 
 // Tags for all resources
 var tags = {
   'azd-env-name': environmentName
   purpose: 'redis-entra-id-testing'
+  clusterPolicy: redisClusterPolicy
 }
 
 // Naming convention
 var abbrs = loadJsonContent('./abbreviations.json')
 var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
+
+// Use existing identity or create new one
+var useExistingIdentity = !empty(existingManagedIdentityPrincipalId)
 
 // Resource Group
 resource rg 'Microsoft.Resources/resourceGroups@2022-09-01' = {
@@ -43,8 +54,8 @@ resource rg 'Microsoft.Resources/resourceGroups@2022-09-01' = {
   tags: tags
 }
 
-// User-Assigned Managed Identity for VM and Redis access
-module managedIdentity './modules/managed-identity.bicep' = {
+// User-Assigned Managed Identity for VM and Redis access (only if not using existing)
+module managedIdentity './modules/managed-identity.bicep' = if (!useExistingIdentity) {
   name: 'managed-identity'
   scope: rg
   params: {
@@ -65,7 +76,7 @@ module vnet './modules/vnet.bicep' = {
   }
 }
 
-// Azure Managed Redis (Cluster OSS tier with Entra ID auth)
+// Azure Managed Redis with configurable cluster policy
 module redis './modules/redis.bicep' = {
   name: 'redis'
   scope: rg
@@ -74,10 +85,10 @@ module redis './modules/redis.bicep' = {
     location: location
     tags: tags
     sku: redisSku
-    enableClusterMode: enableClusterMode
+    clusterPolicy: redisClusterPolicy
     subnetId: vnet.outputs.redisSubnetId
-    managedIdentityPrincipalId: managedIdentity.outputs.principalId
-    managedIdentityClientId: managedIdentity.outputs.clientId
+    managedIdentityPrincipalId: useExistingIdentity ? existingManagedIdentityPrincipalId : managedIdentity.outputs.principalId
+    managedIdentityClientId: useExistingIdentity ? existingManagedIdentityClientId : managedIdentity.outputs.clientId
   }
 }
 
@@ -92,17 +103,19 @@ module vm './modules/vm.bicep' = {
     subnetId: vnet.outputs.vmSubnetId
     adminUsername: vmAdminUsername
     adminPassword: vmAdminPassword
-    managedIdentityId: managedIdentity.outputs.id
+    managedIdentityId: useExistingIdentity ? existingManagedIdentityId : managedIdentity.outputs.id
   }
 }
 
 // Outputs for use in testing
 output AZURE_RESOURCE_GROUP string = rg.name
 output AZURE_LOCATION string = location
-output AZURE_MANAGED_IDENTITY_CLIENT_ID string = managedIdentity.outputs.clientId
-output AZURE_MANAGED_IDENTITY_PRINCIPAL_ID string = managedIdentity.outputs.principalId
 output REDIS_HOSTNAME string = redis.outputs.hostname
 output REDIS_PORT int = redis.outputs.port
+output REDIS_CLUSTER_POLICY string = redisClusterPolicy
+output AZURE_MANAGED_IDENTITY_CLIENT_ID string = useExistingIdentity ? existingManagedIdentityClientId : managedIdentity.outputs.clientId
+output AZURE_MANAGED_IDENTITY_PRINCIPAL_ID string = useExistingIdentity ? existingManagedIdentityPrincipalId : managedIdentity.outputs.principalId
+output VM_NAME string = vm.outputs.name
 output VM_PUBLIC_IP string = vm.outputs.publicIpAddress
 output VM_ADMIN_USERNAME string = vmAdminUsername
 

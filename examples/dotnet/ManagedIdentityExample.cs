@@ -119,9 +119,11 @@ public class ManagedIdentityExample
         Console.WriteLine($"   Database contains {dbSize} keys");
         Console.WriteLine();
 
-        // Cleanup
+        // Cleanup - delete keys individually for OSS Cluster compatibility
         Console.WriteLine("9. Cleaning up test keys...");
-        await db.KeyDeleteAsync(new RedisKey[] { testKey, hashKey });
+        await db.KeyDeleteAsync(testKey);
+        await db.KeyDeleteAsync(hashKey);
+        await db.KeyDeleteAsync(counterKey);
         Console.WriteLine("   ✅ Deleted test keys");
         Console.WriteLine();
 

@@ -1,14 +1,39 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+
 # Azure Developer CLI (azd) configuration
 # This deploys a test environment with Azure Managed Redis and a VM for testing examples
 name: redis-entra-id-test-env
 metadata:
   template: redis-entra-id-test-env@0.0.1
 
+# Note: This project uses staged deployment with custom scripts
+# Run: ./infra/scripts/deploy.sh (or azd up which calls the script)
+# 
+# Why custom scripts?
+# - Support both OSS Cluster and Enterprise Cluster policies
+# - Stage outputs must feed into next stage (VNet IDs, subnet IDs, etc.)
+# - Redis can take 15-20+ minutes to provision
+# - Access policy assignments need Redis to be fully provisioned first
+#
+# Environment Variables (set via azd env set):
+# - REDIS_CLUSTER_POLICY: 'OSSCluster' or 'EnterpriseCluster' (default: EnterpriseCluster)
+# - REDIS_SKU: Balanced_B5, MemoryOptimized_M10, etc. (default: Balanced_B5)
+
 # Infrastructure configuration
 infra:
   provider: bicep
   path: ./infra
   module: main
+
+# Hooks for custom deployment steps
+hooks:
+  preprovision:
+    posix:
+      shell: bash
+      run: ./infra/scripts/deploy.sh
+    windows:
+      shell: pwsh
+      run: .\infra\scripts\deploy.ps1
 
 # No application services - this is infrastructure-only for testing
 # The VM will be used to run the example code manually

@@ -8,11 +8,12 @@ param location string
 param tags object
 
 @description('SKU for Azure Managed Redis')
-@allowed(['MemoryOptimized_M10', 'MemoryOptimized_M20', 'MemoryOptimized_M50', 'MemoryOptimized_M100'])
+@allowed(['Balanced_B5', 'Balanced_B10', 'Balanced_B20', 'MemoryOptimized_M10', 'MemoryOptimized_M20', 'MemoryOptimized_M50', 'ComputeOptimized_X5', 'ComputeOptimized_X10'])
 param sku string
 
-@description('Enable cluster mode')
-param enableClusterMode bool
+@description('Cluster policy: OSSCluster or EnterpriseCluster')
+@allowed(['OSSCluster', 'EnterpriseCluster'])
+param clusterPolicy string
 
 @description('Subnet ID for private endpoint')
 param subnetId string
@@ -24,7 +25,7 @@ param managedIdentityPrincipalId string
 param managedIdentityClientId string
 
 // Azure Managed Redis (preview API)
-resource redis 'Microsoft.Cache/redisEnterprise@2024-02-01' = {
+resource redis 'Microsoft.Cache/redisEnterprise@2024-09-01-preview' = {
   name: name
   location: location
   tags: tags
@@ -36,29 +37,30 @@ resource redis 'Microsoft.Cache/redisEnterprise@2024-02-01' = {
   }
 }
 
-// Redis database with cluster mode and Entra ID auth
-resource database 'Microsoft.Cache/redisEnterprise/databases@2024-02-01' = {
+// Redis database with configurable cluster policy and Entra ID auth
+resource database 'Microsoft.Cache/redisEnterprise/databases@2024-09-01-preview' = {
   parent: redis
   name: 'default'
   properties: {
     clientProtocol: 'Encrypted'
     port: 10000
-    clusteringPolicy: enableClusterMode ? 'OSSCluster' : 'EnterpriseCluster'
+    clusteringPolicy: clusterPolicy
     evictionPolicy: 'NoEviction'
-    // Enable Entra ID authentication
+    // Enable Entra ID authentication (disable access keys)
     accessKeysAuthentication: 'Disabled'
   }
 }
 
 // Access policy assignment for the managed identity
 // This grants the managed identity access to Redis using Entra ID
-resource accessPolicy 'Microsoft.Cache/redisEnterprise/databases/accessPolicyAssignments@2024-02-01' = {
+resource accessPolicy 'Microsoft.Cache/redisEnterprise/databases/accessPolicyAssignments@2024-09-01-preview' = {
   parent: database
   name: 'managed-identity-access'
   properties: {
-    accessPolicyName: 'Data Owner'  // Full access
-    objectId: managedIdentityPrincipalId
-    objectIdAlias: 'test-vm-identity-${managedIdentityClientId}'
+    accessPolicyName: 'default'  // Data Owner - Full access
+    user: {
+      objectId: managedIdentityPrincipalId
+    }
   }
 }
 
@@ -87,7 +89,7 @@ resource privateEndpoint 'Microsoft.Network/privateEndpoints@2023-05-01' = {
 
 // Private DNS zone for Redis
 resource privateDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' = {
-  name: 'privatelink.redisenterprise.cache.azure.net'
+  name: 'privatelink.${location}.redis.azure.net'
   location: 'global'
   tags: tags
 }
@@ -124,5 +126,6 @@ resource privateDnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneG
 
 output id string = redis.id
 output name string = redis.name
-output hostname string = '${redis.name}.${location}.redisenterprise.cache.azure.net'
-output port int = 10000
+output hostname string = redis.properties.hostName
+output port int = database.properties.port
+output clusterPolicy string = clusterPolicy

@@ -108,30 +108,57 @@ azure-managed-redis-entra-id-auth/
 
 This repository includes infrastructure-as-code for deploying a complete test environment using `azd`.
 
-### Deploy Test Environment
+### Quick Start (3 Commands!)
 
 ```bash
-# Login to Azure
-azd auth login
-
-# Deploy everything (Redis + VM with all runtimes)
+# 1. Deploy infrastructure (Redis + VM with all runtimes)
 azd up
 
-# Get connection info
-azd env get-values
+# 2. Copy examples to VM
+./run.sh setup
+
+# 3. Run all tests
+./run.sh all
 ```
 
-### Run Tests on the VM
+### Available Test Commands
 
 ```bash
-# SSH to the VM
-ssh azureuser@<vm-public-ip>
+# Check deployment status
+./run.sh status
 
-# Clone examples and run tests
-git clone <this-repo> ~/redis-examples
-export AZURE_CLIENT_ID="<from azd outputs>"
-export REDIS_HOSTNAME="<from azd outputs>"
-./run-tests.sh all
+# Run individual language examples
+./run.sh python
+./run.sh nodejs
+./run.sh dotnet
+./run.sh java             # Java Lettuce (Enterprise policy)
+./run.sh java --cluster   # Java Lettuce Cluster (OSS Cluster policy)
+./run.sh jedis            # Java Jedis
+./run.sh go
+
+# Run all examples
+./run.sh all
+```
+
+### Deploy with OSS Cluster Policy
+
+```bash
+# Set cluster policy before deployment
+azd env set REDIS_CLUSTER_POLICY OSSCluster
+
+# Deploy
+azd up
+
+# Test cluster-aware client
+./run.sh setup
+./run.sh java --cluster
+```
+
+### Manual VM Access
+
+```bash
+# SSH to the VM (password from azd env)
+ssh azureuser@$(azd env get-value VM_PUBLIC_IP)
 ```
 
 See [infra/README.md](./infra/README.md) for detailed instructions.
