@@ -150,11 +150,21 @@ setup_vm() {
     echo -e "${GREEN}✅ Examples copied to VM${NC}"
 }
 
-# Run Python example
+# Run Python example (auto-detects cluster policy)
 run_python() {
+    local cluster_mode="${1:-auto}"
+    local example_file="managed_identity_example.py"
+    local policy_suffix=""
+    
+    # Determine which example to run
+    if [ "$cluster_mode" = "cluster" ] || ([ "$cluster_mode" = "auto" ] && [ "$REDIS_CLUSTER_POLICY" = "OSSCluster" ]); then
+        example_file="cluster_managed_identity_example.py"
+        policy_suffix=" (OSS Cluster)"
+    fi
+    
     echo ""
     echo -e "${BLUE}==========================================${NC}"
-    echo -e "${BLUE}  Running Python Example${NC}"
+    echo -e "${BLUE}  Running Python Example${policy_suffix}${NC}"
     echo -e "${BLUE}==========================================${NC}"
     
     run_on_vm "cd ~/python && \
@@ -165,14 +175,24 @@ run_python() {
         export REDIS_HOSTNAME='$REDIS_HOSTNAME' && \
         export REDIS_PORT='$REDIS_PORT' && \
         export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
-        python managed_identity_example.py"
+        python $example_file"
 }
 
-# Run Node.js example
+# Run Node.js example (auto-detects cluster policy)
 run_nodejs() {
+    local cluster_mode="${1:-auto}"
+    local example_file="managed_identity_example.mjs"
+    local policy_suffix=""
+    
+    # Determine which example to run
+    if [ "$cluster_mode" = "cluster" ] || ([ "$cluster_mode" = "auto" ] && [ "$REDIS_CLUSTER_POLICY" = "OSSCluster" ]); then
+        example_file="cluster_managed_identity_example.mjs"
+        policy_suffix=" (OSS Cluster)"
+    fi
+    
     echo ""
     echo -e "${BLUE}==========================================${NC}"
-    echo -e "${BLUE}  Running Node.js Example${NC}"
+    echo -e "${BLUE}  Running Node.js Example${policy_suffix}${NC}"
     echo -e "${BLUE}==========================================${NC}"
     
     run_on_vm "cd ~/nodejs && \
@@ -181,14 +201,24 @@ run_nodejs() {
         export REDIS_HOSTNAME='$REDIS_HOSTNAME' && \
         export REDIS_PORT='$REDIS_PORT' && \
         export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
-        node managed_identity_example.mjs"
+        node $example_file"
 }
 
-# Run .NET example
+# Run .NET example (auto-detects cluster policy)
 run_dotnet() {
+    local cluster_mode="${1:-auto}"
+    local cluster_flag=""
+    local policy_suffix=""
+    
+    # Determine which example to run
+    if [ "$cluster_mode" = "cluster" ] || ([ "$cluster_mode" = "auto" ] && [ "$REDIS_CLUSTER_POLICY" = "OSSCluster" ]); then
+        cluster_flag="--cluster"
+        policy_suffix=" (OSS Cluster)"
+    fi
+    
     echo ""
     echo -e "${BLUE}==========================================${NC}"
-    echo -e "${BLUE}  Running .NET Example${NC}"
+    echo -e "${BLUE}  Running .NET Example${policy_suffix}${NC}"
     echo -e "${BLUE}==========================================${NC}"
     
     run_on_vm "cd ~/dotnet && \
@@ -196,14 +226,24 @@ run_dotnet() {
         export REDIS_HOSTNAME='$REDIS_HOSTNAME' && \
         export REDIS_PORT='$REDIS_PORT' && \
         export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
-        dotnet run -- --ManagedIdentity 2>&1"
+        dotnet run -- --ManagedIdentity $cluster_flag 2>&1"
 }
 
-# Run Java Lettuce example (supports both Enterprise and OSS Cluster)
+# Run Java Lettuce example (auto-detects cluster policy)
 run_java() {
+    local cluster_mode="${1:-auto}"
+    local main_class="com.example.ManagedIdentityExample"
+    local policy_suffix=""
+    
+    # Determine which example to run
+    if [ "$cluster_mode" = "cluster" ] || ([ "$cluster_mode" = "auto" ] && [ "$REDIS_CLUSTER_POLICY" = "OSSCluster" ]); then
+        main_class="com.example.ClusterManagedIdentityExample"
+        policy_suffix=" (OSS Cluster)"
+    fi
+    
     echo ""
     echo -e "${BLUE}==========================================${NC}"
-    echo -e "${BLUE}  Running Java Lettuce Example${NC}"
+    echo -e "${BLUE}  Running Java Lettuce Example${policy_suffix}${NC}"
     echo -e "${BLUE}==========================================${NC}"
     
     run_on_vm "cd ~/java-lettuce && \
@@ -212,36 +252,29 @@ run_java() {
         export REDIS_PORT='$REDIS_PORT' && \
         export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
         mvn compile -q && \
-        mvn exec:java -Dexec.mainClass='com.example.ManagedIdentityExample' -q 2>&1"
+        mvn exec:java -Dexec.mainClass='$main_class' -q 2>&1"
 }
 
-# Run Java Lettuce Cluster example (OSS Cluster policy - cluster-aware client)
+# Run Java Lettuce Cluster example (explicit OSS Cluster - for backwards compatibility)
 run_java_cluster() {
-    echo ""
-    echo -e "${BLUE}==========================================${NC}"
-    echo -e "${BLUE}  Running Java Lettuce Example (OSS Cluster)${NC}"
-    echo -e "${BLUE}==========================================${NC}"
+    run_java "cluster"
+}
+
+# Run Java Jedis example (auto-detects cluster policy)
+run_jedis() {
+    local cluster_mode="${1:-auto}"
+    local main_class="com.example.ManagedIdentityExample"
+    local policy_suffix=""
     
-    if [ "$REDIS_CLUSTER_POLICY" != "OSSCluster" ]; then
-        echo -e "${YELLOW}⚠️  Warning: Current deployment uses '$REDIS_CLUSTER_POLICY' policy.${NC}"
-        echo -e "${YELLOW}   The cluster example is designed for 'OSSCluster' policy.${NC}"
-        echo -e "${YELLOW}   It may still work but won't demonstrate cluster features.${NC}"
-        echo ""
+    # Determine which example to run
+    if [ "$cluster_mode" = "cluster" ] || ([ "$cluster_mode" = "auto" ] && [ "$REDIS_CLUSTER_POLICY" = "OSSCluster" ]); then
+        main_class="com.example.ClusterManagedIdentityExample"
+        policy_suffix=" (OSS Cluster)"
     fi
     
-    run_on_vm "cd ~/java-lettuce && \
-        export AZURE_CLIENT_ID='$AZURE_CLIENT_ID' && \
-        export REDIS_HOSTNAME='$REDIS_HOSTNAME' && \
-        export REDIS_PORT='$REDIS_PORT' && \
-        mvn compile -q && \
-        mvn exec:java -Dexec.mainClass='com.example.ClusterManagedIdentityExample' -q 2>&1"
-}
-
-# Run Java Jedis example
-run_jedis() {
     echo ""
     echo -e "${BLUE}==========================================${NC}"
-    echo -e "${BLUE}  Running Java Jedis Example${NC}"
+    echo -e "${BLUE}  Running Java Jedis Example${policy_suffix}${NC}"
     echo -e "${BLUE}==========================================${NC}"
     
     run_on_vm "cd ~/java-jedis && \
@@ -250,14 +283,24 @@ run_jedis() {
         export REDIS_PORT='$REDIS_PORT' && \
         export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
         mvn compile -q && \
-        mvn exec:java -Dexec.mainClass='com.example.ManagedIdentityExample' -q 2>&1"
+        mvn exec:java -Dexec.mainClass='$main_class' -q 2>&1"
 }
 
-# Run Go example
+# Run Go example (auto-detects cluster policy)
 run_go() {
+    local cluster_mode="${1:-auto}"
+    local example_file="managed_identity_example.go"
+    local policy_suffix=""
+    
+    # Determine which example to run
+    if [ "$cluster_mode" = "cluster" ] || ([ "$cluster_mode" = "auto" ] && [ "$REDIS_CLUSTER_POLICY" = "OSSCluster" ]); then
+        example_file="cluster_managed_identity_example.go"
+        policy_suffix=" (OSS Cluster)"
+    fi
+    
     echo ""
     echo -e "${BLUE}==========================================${NC}"
-    echo -e "${BLUE}  Running Go Example${NC}"
+    echo -e "${BLUE}  Running Go Example${policy_suffix}${NC}"
     echo -e "${BLUE}==========================================${NC}"
     
     run_on_vm "cd ~/go-example && \
@@ -271,10 +314,10 @@ run_go() {
         export GOCACHE=\$HOME/gocache && \
         mkdir -p \$GOPATH \$GOCACHE && \
         go mod tidy && \
-        go run managed_identity_example.go 2>&1"
+        go run $example_file 2>&1"
 }
 
-# Run all examples
+# Run all examples (auto-detects cluster policy)
 run_all() {
     echo ""
     echo -e "${BLUE}==========================================${NC}"
@@ -344,17 +387,13 @@ run_all() {
         ((failed++))
     fi
     
-    # Java Jedis (Enterprise policy only for now)
-    if [ "$REDIS_CLUSTER_POLICY" != "OSSCluster" ]; then
-        if run_jedis; then
-            results+=("Java Jedis: ✅ PASSED")
-            ((passed++))
-        else
-            results+=("Java Jedis: ❌ FAILED")
-            ((failed++))
-        fi
+    # Java Jedis (now supports both Enterprise and OSS Cluster)
+    if run_jedis; then
+        results+=("Java Jedis: ✅ PASSED")
+        ((passed++))
     else
-        results+=("Java Jedis: ⏭️ SKIPPED (no OSS Cluster support)")
+        results+=("Java Jedis: ❌ FAILED")
+        ((failed++))
     fi
     
     # Summary
@@ -382,30 +421,33 @@ usage() {
     echo "Commands:"
     echo "  status          Show deployment status and connection info"
     echo "  setup           Copy example files to VM"
-    echo "  python          Run Python example"
-    echo "  nodejs          Run Node.js example"
-    echo "  dotnet          Run .NET example"
-    echo "  java            Run Java Lettuce example (Enterprise policy)"
-    echo "  java --cluster  Run Java Lettuce Cluster example (OSS Cluster policy)"
-    echo "  jedis           Run Java Jedis example"
-    echo "  go              Run Go example"
-    echo "  all             Run all examples (smart: skips incompatible tests)"
+    echo "  python          Run Python example (auto-detects cluster policy)"
+    echo "  nodejs          Run Node.js example (auto-detects cluster policy)"
+    echo "  dotnet          Run .NET example (auto-detects cluster policy)"
+    echo "  java            Run Java Lettuce example (auto-detects cluster policy)"
+    echo "  jedis           Run Java Jedis example (auto-detects cluster policy)"
+    echo "  go              Run Go example (auto-detects cluster policy)"
+    echo "  all             Run all examples (auto-detects cluster policy)"
     echo ""
-    echo "Cluster Policy Notes:"
-    echo "  • Enterprise policy: All standard clients work"
-    echo "  • OSS Cluster policy: Only cluster-aware clients work reliably"
-    echo "    - Use 'java --cluster' for cluster-aware Java Lettuce"
-    echo "    - Other examples may fail with MOVED errors"
+    echo "Cluster Policy Auto-Detection:"
+    echo "  All examples automatically detect the cluster policy from REDIS_CLUSTER_POLICY"
+    echo "  environment variable and use the appropriate client implementation:"
+    echo ""
+    echo "  • Enterprise policy: Uses standard Redis clients"
+    echo "    (Server handles slot routing transparently)"
+    echo ""
+    echo "  • OSS Cluster policy: Uses cluster-aware clients with address remapping"
+    echo "    (Client maps internal Azure IPs to public hostname)"
     echo ""
     echo "Quick Start:"
     echo "  1. azd up                          # Deploy infrastructure"
     echo "  2. ./run.sh setup                  # Copy examples to VM"
     echo "  3. ./run.sh all                    # Run all tests"
     echo ""
-    echo "For OSS Cluster deployments:"
-    echo "  azd env set REDIS_CLUSTER_POLICY OSSCluster"
+    echo "To switch cluster policy:"
+    echo "  azd env set REDIS_CLUSTER_POLICY OSSCluster  # or 'Enterprise'"
     echo "  azd up"
-    echo "  ./run.sh setup && ./run.sh java --cluster"
+    echo "  ./run.sh setup && ./run.sh all"
     echo ""
 }
 

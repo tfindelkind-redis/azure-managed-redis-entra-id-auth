@@ -95,26 +95,57 @@ provider, err := entraid.NewConfidentialCredentialsProvider(
 go/
 ├── README.md
 ├── go.mod
-├── managed_identity_example.go
-└── service_principal_example.go
+├── managed_identity_example.go           # Enterprise policy
+├── cluster_managed_identity_example.go   # OSS Cluster policy
+└── service_principal_example.go          # Service principal auth
 ```
 
 ## 🔧 Cluster Policy Support
 
-The `managed_identity_example.go` automatically detects the cluster policy via the `REDIS_CLUSTER_POLICY` environment variable:
+Azure Managed Redis supports two cluster policies:
 
-- **EnterpriseCluster** (default): Uses `redis.NewClient()` - server handles slot routing
-- **OSSCluster**: Uses `redis.NewClusterClient()` with custom `Dialer` for address remapping
+### EnterpriseCluster (Default)
+Uses `redis.NewClient()` - server handles slot routing. See `managed_identity_example.go`.
+
+### OSSCluster
+Uses `redis.NewClusterClient()` with custom `Dialer` for address remapping. The key challenge is that Azure returns internal IPs in CLUSTER SLOTS responses that are unreachable from outside Azure:
 
 ```go
-// The example auto-detects and uses the appropriate client
-clusterPolicy := os.Getenv("REDIS_CLUSTER_POLICY")
-if clusterPolicy == "OSSCluster" {
-    client = redis.NewClusterClient(...)  // Cluster-aware client with custom Dialer
-} else {
-    client = redis.NewClient(...)  // Standard client
+import (
+    "crypto/tls"
+    "net"
+    "github.com/redis/go-redis/v9"
+)
+
+// Custom dialer that remaps internal IPs to public hostname
+func createClusterDialer(publicHostname string) func(ctx context.Context, network, addr string) (net.Conn, error) {
+    return func(ctx context.Context, network, addr string) (net.Conn, error) {
+        host, port, _ := net.SplitHostPort(addr)
+        
+        // Check if this is a private IP that needs remapping
+        if strings.HasPrefix(host, "10.") || 
+           strings.HasPrefix(host, "192.168.") ||
+           isPrivate172(host) {
+            addr = net.JoinHostPort(publicHostname, port)
+        }
+        
+        // Create TLS connection with correct ServerName for SNI
+        return tls.DialWithDialer(&net.Dialer{}, network, addr, &tls.Config{
+            MinVersion: tls.VersionTLS12,
+            ServerName: publicHostname,  // Critical for SSL validation!
+        })
+    }
 }
+
+client := redis.NewClusterClient(&redis.ClusterOptions{
+    Addrs:                        []string{redisAddr},
+    StreamingCredentialsProvider: provider,
+    TLSConfig:                    tlsConfig,
+    Dialer:                       createClusterDialer(redisHost),  // Key for OSS Cluster!
+})
 ```
+
+See `cluster_managed_identity_example.go` for the full implementation.
 
 ## 🔧 Running Examples
 

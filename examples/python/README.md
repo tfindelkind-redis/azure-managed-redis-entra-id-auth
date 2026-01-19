@@ -109,27 +109,49 @@ client = Redis(
 
 ## 📁 Example Files
 
-| File | Description |
-|------|-------------|
-| `managed_identity_example.py` | Complete example using managed identity (supports both cluster policies) |
-| `service_principal_example.py` | Complete example using service principal |
-| `flask_app_example/` | Full Flask application example |
+| File | Description | Cluster Policy |
+|------|-------------|----------------|
+| `managed_identity_example.py` | Managed identity auth (Enterprise policy) | Enterprise |
+| `cluster_managed_identity_example.py` | Cluster-aware managed identity auth | OSS Cluster |
+| `service_principal_example.py` | Service principal auth (Enterprise policy) | Enterprise |
 
 ## 🔧 Cluster Policy Support
 
-The `managed_identity_example.py` automatically detects the cluster policy via the `REDIS_CLUSTER_POLICY` environment variable:
+Azure Managed Redis supports two cluster policies:
 
-- **EnterpriseCluster** (default): Uses standard `Redis` client - server handles slot routing
-- **OSSCluster**: Uses `RedisCluster` client with address remapping for SSL/SNI validation
+### EnterpriseCluster (Default)
+Uses standard `Redis` client - server handles slot routing. See `managed_identity_example.py`.
+
+### OSSCluster  
+Uses `RedisCluster` client with address remapping. The key challenge is that Azure returns internal IPs in CLUSTER SLOTS responses that are unreachable from outside Azure. We handle this with the `address_remap` parameter:
 
 ```python
-# The example auto-detects and uses the appropriate client
-cluster_policy = os.environ.get("REDIS_CLUSTER_POLICY", "EnterpriseCluster")
-if cluster_policy == "OSSCluster":
-    client = RedisCluster(...)  # Cluster-aware client with address_remap
-else:
-    client = Redis(...)  # Standard client
+from redis.cluster import RedisCluster, ClusterNode
+
+# Create address remap function for Azure's internal IPs
+def address_remap(address):
+    host, port = address
+    # Azure returns internal IPs that need to be remapped to public hostname
+    if host.startswith(('10.', '192.168.')) or host.startswith('172.'):
+        # Check for 172.16-31.x.x (private range)
+        if host.startswith('172.'):
+            second_octet = int(host.split('.')[1])
+            if 16 <= second_octet <= 31:
+                return (redis_host, port)
+        else:
+            return (redis_host, port)
+    return address
+
+client = RedisCluster(
+    startup_nodes=[ClusterNode(redis_host, redis_port)],
+    credential_provider=credential_provider,
+    ssl=True,
+    address_remap=address_remap,  # Key for OSS Cluster!
+    require_full_coverage=False
+)
 ```
+
+See `cluster_managed_identity_example.py` for the full implementation.
 
 ## 🔧 Configuration
 

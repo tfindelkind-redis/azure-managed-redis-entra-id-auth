@@ -4,8 +4,9 @@
  * Entry point for running the authentication examples.
  * 
  * Usage:
- *   dotnet run --ManagedIdentity     Run with User-Assigned Managed Identity
- *   dotnet run --ServicePrincipal    Run with Service Principal
+ *   dotnet run --ManagedIdentity            Run with User-Assigned Managed Identity (Enterprise)
+ *   dotnet run --ManagedIdentity --cluster  Run with Managed Identity (OSS Cluster)
+ *   dotnet run --ServicePrincipal           Run with Service Principal
  */
 
 namespace EntraIdAuth;
@@ -20,11 +21,16 @@ class Program
             return;
         }
 
+        var useCluster = args.Contains("--cluster", StringComparer.OrdinalIgnoreCase);
+
         switch (args[0].ToLower())
         {
             case "--managedidentity":
             case "-mi":
-                await ManagedIdentityExample.RunAsync();
+                if (useCluster)
+                    await ClusterManagedIdentityExample.RunAsync();
+                else
+                    await ManagedIdentityExample.RunAsync();
                 break;
             
             case "--serviceprincipal":
@@ -49,12 +55,17 @@ class Program
         Console.WriteLine();
         Console.WriteLine("Azure Managed Redis - Entra ID Authentication Examples");
         Console.WriteLine();
-        Console.WriteLine("Usage: dotnet run <option>");
+        Console.WriteLine("Usage: dotnet run <option> [--cluster]");
         Console.WriteLine();
         Console.WriteLine("Options:");
         Console.WriteLine("  --ManagedIdentity, -mi    Run with User-Assigned Managed Identity");
         Console.WriteLine("  --ServicePrincipal, -sp   Run with Service Principal");
+        Console.WriteLine("  --cluster                 Use OSS Cluster-aware client (with -mi)");
         Console.WriteLine("  --help, -h                Show this help message");
+        Console.WriteLine();
+        Console.WriteLine("Examples:");
+        Console.WriteLine("  dotnet run --ManagedIdentity            # Enterprise policy");
+        Console.WriteLine("  dotnet run --ManagedIdentity --cluster  # OSS Cluster policy");
         Console.WriteLine();
         Console.WriteLine("Environment Variables:");
         Console.WriteLine("  For Managed Identity:");

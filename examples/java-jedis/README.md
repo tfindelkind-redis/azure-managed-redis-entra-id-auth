@@ -93,19 +93,40 @@ TokenAuthConfig authConfig = EntraIDTokenAuthConfigBuilder.builder()
 Azure Managed Redis supports two cluster policies:
 
 ### EnterpriseCluster (Default)
-Standard Redis client works - server handles slot routing internally.
+Standard Redis client works - server handles slot routing internally. Uses `ManagedIdentityExample.java`.
 
 ### OSSCluster
-Requires cluster-aware client using `RedisClusterClient`:
+Requires cluster-aware client using `JedisCluster` with address remapping. The key challenge is that Azure returns internal IPs in CLUSTER SLOTS responses that are unreachable from outside Azure. We handle this with a `HostAndPortMapper`:
 
 ```java
-try (RedisClusterClient jedis = RedisClusterClient.builder()
-        .nodes(Collections.singleton(new HostAndPort(redisHost, redisPort)))
-        .clientConfig(config)
-        .build()) {
-    System.out.println("PING: " + jedis.ping());
+// Create address mapper that remaps internal Azure IPs to public hostname
+HostAndPortMapper hostMapper = (hostAndPort) -> {
+    String host = hostAndPort.getHost();
+    // Check if this is an internal Azure IP (not publicly routable)
+    if (host.startsWith("10.") || 
+        host.startsWith("192.168.") ||
+        host.matches("^172\\.(1[6-9]|2[0-9]|3[0-1])\\..*")) {
+        // Remap to the public hostname (preserving the port for correct slot routing)
+        return new HostAndPort(redisHost, hostAndPort.getPort());
+    }
+    return hostAndPort;
+};
+
+JedisClientConfig config = DefaultJedisClientConfig.builder()
+    .authXManager(authXManager)
+    .ssl(true)
+    .hostAndPortMapper(hostMapper)
+    .build();
+
+try (JedisCluster jedis = new JedisCluster(
+        Collections.singleton(new HostAndPort(redisHost, redisPort)),
+        config)) {
+    System.out.println("PING: " + jedis.sendCommand(new HostAndPort(redisHost, redisPort), 
+                                                     Protocol.Command.PING));
 }
 ```
+
+See `ClusterManagedIdentityExample.java` for the full implementation.
 
 ## 📁 Project Structure
 
@@ -118,8 +139,9 @@ java-jedis/
         └── java/
             └── com/
                 └── example/
-                    ├── ManagedIdentityExample.java
-                    └── ServicePrincipalExample.java
+                    ├── ManagedIdentityExample.java         # Enterprise policy
+                    ├── ClusterManagedIdentityExample.java  # OSS Cluster policy
+                    └── ServicePrincipalExample.java        # Service principal auth
 ```
 
 ## 🔧 Building and Running

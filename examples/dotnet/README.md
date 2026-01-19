@@ -58,24 +58,39 @@ var configurationOptions = await ConfigurationOptions.Parse($"{redisHostname}:10
 dotnet/
 ├── README.md
 ├── EntraIdAuth.csproj
-├── ManagedIdentityExample.cs
-└── ServicePrincipalExample.cs
+├── Program.cs                           # Entry point (detects --cluster flag)
+├── ManagedIdentityExample.cs            # Enterprise policy
+├── ClusterManagedIdentityExample.cs     # OSS Cluster policy
+└── ServicePrincipalExample.cs           # Service principal auth
 ```
 
 ## 🔧 Cluster Policy Support
 
-The `ManagedIdentityExample.cs` automatically detects the cluster policy via the `REDIS_CLUSTER_POLICY` environment variable:
+Azure Managed Redis supports two cluster policies:
 
-- **EnterpriseCluster** (default): Standard connection - server handles slot routing
-- **OSSCluster**: Cluster-aware connection - StackExchange.Redis handles clustering automatically
+### EnterpriseCluster (Default)
+Uses standard `ConnectionMultiplexer` - server handles slot routing. See `ManagedIdentityExample.cs`.
+
+### OSSCluster
+Uses `ConnectionMultiplexer` with cluster topology discovery. StackExchange.Redis **automatically** handles cluster topology discovery and MOVED/ASK redirections. **No explicit address remapping is needed** unlike other language clients!
 
 ```csharp
-// The example auto-detects and uses the appropriate connection
-var clusterPolicy = Environment.GetEnvironmentVariable("REDIS_CLUSTER_POLICY") ?? "EnterpriseCluster";
-// StackExchange.Redis automatically handles cluster topology
+// StackExchange.Redis handles OSS Cluster transparently
+var configurationOptions = await ConfigurationOptions.Parse($"{redisHostname}:10000")
+    .ConfigureForAzureWithUserAssignedManagedIdentityAsync(clientId);
+
+configurationOptions.Ssl = true;
+configurationOptions.AllowAdmin = true;  // For CLUSTER INFO commands
+
+// The multiplexer automatically:
+// - Discovers cluster topology via CLUSTER SLOTS
+// - Routes commands to correct shard
+// - Handles MOVED/ASK redirects
+// - Manages internal IP resolution
+using var connection = await ConnectionMultiplexer.ConnectAsync(configurationOptions);
 ```
 
-> **Note:** StackExchange.Redis automatically discovers cluster topology and handles MOVED/ASK redirections, so no special address remapping is needed.
+See `ClusterManagedIdentityExample.cs` for the full implementation.
 
 ## 🔧 Running Examples
 

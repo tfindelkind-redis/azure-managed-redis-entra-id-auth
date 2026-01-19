@@ -10,8 +10,8 @@ param environmentName string
 param location string
 
 @description('Azure Managed Redis SKU')
-@allowed(['Balanced_B5', 'Balanced_B10', 'Balanced_B20', 'MemoryOptimized_M10', 'MemoryOptimized_M20', 'MemoryOptimized_M50', 'ComputeOptimized_X5', 'ComputeOptimized_X10'])
-param redisSku string = 'Balanced_B5'
+@allowed(['Balanced_B0', 'Balanced_B1', 'Balanced_B3', 'Balanced_B5', 'Balanced_B10', 'Balanced_B20', 'MemoryOptimized_M10', 'MemoryOptimized_M20', 'MemoryOptimized_M50', 'ComputeOptimized_X5', 'ComputeOptimized_X10'])
+param redisSku string = 'Balanced_B1'
 
 @description('Redis cluster policy: OSSCluster (for cluster-aware clients) or EnterpriseCluster (single endpoint proxy)')
 @allowed(['OSSCluster', 'EnterpriseCluster'])

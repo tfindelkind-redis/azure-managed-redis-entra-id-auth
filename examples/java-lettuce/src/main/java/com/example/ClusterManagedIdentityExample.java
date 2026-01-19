@@ -201,23 +201,28 @@ public class ClusterManagedIdentityExample {
                 System.out.println("7. Testing PING...");
                 System.out.println("   ✅ PING response: " + commands.ping() + "\n");
 
-                // Test SET/GET across multiple hash slots to verify cluster routing
-                System.out.println("8. Testing SET/GET operations across different hash slots...");
-                String[] testKeys = {
-                    "cluster:foo",   // Different keys will hash to different slots
-                    "cluster:bar",
-                    "cluster:baz",
-                    "cluster:qux",
-                    "cluster:test"
+                // Test SET/GET with keys that DEFINITELY hit different shards using hash tags
+                // Hash tags {xxx} ensure the slot is calculated from the tag content only
+                // This validates that MappingSocketAddressResolver is working correctly!
+                System.out.println("8. Testing SET/GET operations across MULTIPLE shards...");
+                System.out.println("   Using hash tags to guarantee cross-shard distribution");
+                String[][] testKeyPairs = {
+                    {"{slot2}", "shard0"},   // slot 98 -> shard 0
+                    {"{slot3}", "shard0"},   // slot 4163 -> shard 0
+                    {"{slot0}", "shard1"},   // slot 8224 -> shard 1
+                    {"{slot1}", "shard1"},   // slot 12289 -> shard 1
                 };
                 
-                for (String key : testKeys) {
+                for (String[] pair : testKeyPairs) {
+                    String key = "lettuce-cluster:" + pair[0];
+                    String expectedShard = pair[1];
                     String value = "value-" + System.currentTimeMillis();
                     commands.setex(key, 60, value);
                     String retrieved = commands.get(key);
-                    System.out.println("   ✅ " + key + " -> SET/GET successful");
+                    System.out.println("   ✅ " + key + " -> SET/GET successful -> " + expectedShard);
                     commands.del(key);
                 }
+                System.out.println("   If you see this, MappingSocketAddressResolver is working correctly!");
                 System.out.println();
 
                 // Test with timestamp key

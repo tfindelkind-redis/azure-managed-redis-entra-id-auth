@@ -86,27 +86,53 @@ const provider = EntraIdCredentialsProviderFactory.createForDefaultAzureCredenti
 nodejs/
 ├── README.md
 ├── package.json
-├── managed_identity_example.mjs
-├── service_principal_example.mjs
-└── default_credential_example.mjs
+├── managed_identity_example.mjs           # Enterprise policy
+├── cluster_managed_identity_example.mjs   # OSS Cluster policy
+├── service_principal_example.mjs          # Service principal auth
+└── default_credential_example.mjs         # DefaultAzureCredential
 ```
 
 ## 🔧 Cluster Policy Support
 
-The `managed_identity_example.mjs` automatically detects the cluster policy via the `REDIS_CLUSTER_POLICY` environment variable:
+Azure Managed Redis supports two cluster policies:
 
-- **EnterpriseCluster** (default): Uses `createClient()` - server handles slot routing
-- **OSSCluster**: Uses `createCluster()` with `nodeAddressMap` for SSL/SNI validation
+### EnterpriseCluster (Default)
+Uses `createClient()` - server handles slot routing. See `managed_identity_example.mjs`.
+
+### OSSCluster
+Uses `createCluster()` with `nodeAddressMap` for address remapping. The key challenge is that Azure returns internal IPs in CLUSTER SLOTS responses that are unreachable from outside Azure:
 
 ```javascript
-// The example auto-detects and uses the appropriate client
-const clusterPolicy = process.env.REDIS_CLUSTER_POLICY || 'EnterpriseCluster';
-if (clusterPolicy === 'OSSCluster') {
-    client = createCluster({...});  // Cluster-aware client with nodeAddressMap
-} else {
-    client = createClient({...});   // Standard client
+import { createCluster } from 'redis';
+
+// Create node address mapper for Azure's internal IPs
+function createNodeAddressMap(publicHostname) {
+    return (address) => {
+        const host = address.host;
+        // Check if this is a private IP that needs remapping
+        if (host.startsWith('10.') || 
+            host.startsWith('192.168.') ||
+            (host.startsWith('172.') && 
+             parseInt(host.split('.')[1]) >= 16 && 
+             parseInt(host.split('.')[1]) <= 31)) {
+            return { host: publicHostname, port: address.port };
+        }
+        return address;
+    };
 }
+
+const client = createCluster({
+    rootNodes: [{ url: `rediss://${redisHost}:${redisPort}` }],
+    useReplicas: true,
+    nodeAddressMap: createNodeAddressMap(redisHost),  // Key for OSS Cluster!
+    defaults: {
+        username: oid,
+        password: token
+    }
+});
 ```
+
+See `cluster_managed_identity_example.mjs` for the full implementation.
 
 ## 🔧 Running Examples
 
