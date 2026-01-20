@@ -105,10 +105,20 @@ java-lettuce/
         └── java/
             └── com/
                 └── example/
-                    ├── ManagedIdentityExample.java      # Supports both cluster policies
-                    ├── ClusterManagedIdentityExample.java # Legacy OSS Cluster example
-                    └── ServicePrincipalExample.java
+                    ├── ManagedIdentityExample.java        # Multi-mode (Enterprise + OSS)
+                    └── ClusterManagedIdentityExample.java # OSS Cluster dedicated
 ```
+
+### Why Two Files?
+
+| File | Cluster Policy | Used By | Purpose |
+|------|---------------|---------|---------|
+| **ManagedIdentityExample.java** | Both | Manual testing | Single file supporting both policies via `REDIS_CLUSTER_POLICY` env var |
+| **ClusterManagedIdentityExample.java** | OSS Cluster | `run.sh` | Dedicated OSS implementation with detailed documentation and MOVED handling demo |
+
+**When to use which:**
+- **`ManagedIdentityExample.java`**: Best for understanding how to write code that works with either cluster policy. Auto-detects and switches between `RedisClient` (Enterprise) and `RedisClusterClient` (OSS).
+- **`ClusterManagedIdentityExample.java`**: Best for understanding OSS Cluster specifics - includes extensive comments explaining MappingSocketAddressResolver, SSL/SNI, and MOVED handling.
 
 ## 🔧 Cluster Policy Support
 
@@ -127,6 +137,52 @@ if ("OSSCluster".equalsIgnoreCase(clusterPolicy)) {
     // Use standard RedisClient
     runWithStandardClient(clientId, redisHost, redisPort);
 }
+```
+
+### OSS Cluster: MOVED Handling
+
+With OSS Cluster policy, Redis returns `MOVED` responses when keys are on different shards. The `ClusterManagedIdentityExample.java` demonstrates this:
+
+```java
+// Calculate key slots using CRC16 (same algorithm Redis uses)
+long slot = io.lettuce.core.cluster.SlotHash.getSlot("user:1000");  // slot 1649
+
+// Lettuce ClusterClient handles MOVED redirects automatically
+// Keys on different shards are routed transparently:
+commands.setex("key:{A}", 30, "value1");  // slot 6373 -> shard 1
+commands.setex("key:{B}", 30, "value2");  // slot 10374 -> shard 2
+```
+
+Example output showing MOVED handling:
+```
+Cluster slot distribution:
+  Primary 1: 10.0.2.4:8501 (slots: 0-8191)
+  Primary 2: 10.0.2.4:8500 (slots: 8192-16383)
+
+Key slot calculations:
+  Key 'user:1000' -> slot 1649
+  Key 'session:abc' -> slot 14788
+
+✅ Wrote 'lettuce-moved-test:{A}' (slot 6373)
+✅ Wrote 'lettuce-moved-test:{B}' (slot 10374)
+→ Lettuce ClusterClient handled MOVED redirects automatically!
+```
+
+### MappingSocketAddressResolver for SSL/SNI
+
+OSS Cluster returns internal IPs (e.g., `10.0.2.4:8500`) which would fail SSL certificate validation. The `MappingSocketAddressResolver` maps these to the public hostname:
+
+```java
+MappingSocketAddressResolver resolver = MappingSocketAddressResolver.create(
+    DnsResolvers.UNRESOLVED,  // Let Netty handle DNS for SNI
+    hostAndPort -> {
+        if (isInternalIP(hostAndPort.getHostText())) {
+            // Map internal IP to public hostname for SSL/SNI
+            return HostAndPort.of(redisHost, hostAndPort.getPort());
+        }
+        return hostAndPort;
+    }
+);
 ```
 
 ## 🔧 Building and Running
