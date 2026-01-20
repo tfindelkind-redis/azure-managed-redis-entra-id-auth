@@ -7,15 +7,18 @@ param environmentName string
 
 @minLength(1)
 @description('Primary location for all resources')
-param location string
+param location string = 'westus3'
 
-@description('Azure Managed Redis SKU')
+@description('Azure Managed Redis SKU - B5 recommended for OSS Cluster testing (multiple primary shards)')
 @allowed(['Balanced_B0', 'Balanced_B1', 'Balanced_B3', 'Balanced_B5', 'Balanced_B10', 'Balanced_B20', 'MemoryOptimized_M10', 'MemoryOptimized_M20', 'MemoryOptimized_M50', 'ComputeOptimized_X5', 'ComputeOptimized_X10'])
-param redisSku string = 'Balanced_B1'
+param redisSku string = 'Balanced_B5'
 
 @description('Redis cluster policy: OSSCluster (for cluster-aware clients) or EnterpriseCluster (single endpoint proxy)')
 @allowed(['OSSCluster', 'EnterpriseCluster'])
 param redisClusterPolicy string = 'EnterpriseCluster'
+
+@description('Enable High Availability (replica nodes) - strongly recommended for production')
+param redisHighAvailability bool = true
 
 @description('VM admin username')
 param vmAdminUsername string = 'azureuser'
@@ -86,6 +89,7 @@ module redis './modules/redis.bicep' = {
     tags: tags
     sku: redisSku
     clusterPolicy: redisClusterPolicy
+    highAvailability: redisHighAvailability
     subnetId: vnet.outputs.redisSubnetId
     managedIdentityPrincipalId: useExistingIdentity ? existingManagedIdentityPrincipalId : managedIdentity.outputs.principalId
     managedIdentityClientId: useExistingIdentity ? existingManagedIdentityClientId : managedIdentity.outputs.clientId

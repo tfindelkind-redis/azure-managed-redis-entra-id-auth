@@ -207,6 +207,8 @@ You **must** configure a `MappingSocketAddressResolver` (in Lettuce) or similar 
 2. Ensure SSL certificate validation works (cert is for public hostname)
 3. Use `DnsResolvers.UNRESOLVED` for proper SNI (Server Name Indication)
 
+> 📊 **Tested and Verified:** See [Internal IP Connectivity Deep Dive](#internal-ip-connectivity-deep-dive) below for our connectivity test results.
+
 ```java
 // Java Lettuce Example - Required for OSS Cluster
 // CRITICAL: Use DnsResolvers.UNRESOLVED, not JVM_DEFAULT!
@@ -278,6 +280,145 @@ rc = RedisCluster(
     # address_remap function for internal IP mapping
 )
 ```
+
+---
+
+## 🔬 Internal IP Connectivity Deep Dive
+
+### What We Discovered Through Testing
+
+When using **OSS Cluster policy**, Azure Managed Redis advertises internal node addresses via the `CLUSTER NODES` command. Our testing revealed critical details about how these addresses behave:
+
+#### CLUSTER NODES Response Example
+
+```
+127.0.0.1:8501@18501,,server,master - 0 1750012345678 1 connected 0-16383
+127.0.0.1:8500@18500,,server,replica 127.0.0.1:8501 0 1750012345678 1 connected
+```
+
+This response is then transformed by the Azure proxy to show internal IPs like `10.0.2.4:8501`.
+
+### Connectivity Test Results
+
+We performed comprehensive connectivity tests from both inside and outside Azure VNet:
+
+| Test Scenario | From Inside VNet | From Outside VNet |
+|---------------|------------------|-------------------|
+| **TCP to internal IP (10.x.x.x)** | ✅ Connected | ❌ Not routable |
+| **SSL to internal IP (IP as SNI)** | ❌ Cert error | ❌ Not routable |
+| **SSL to internal IP (hostname as SNI)** | ✅ Connected | ❌ Not routable |
+| **SSL to public hostname** | ✅ Connected | ✅ Connected |
+
+### Why SSL Fails with Internal IPs
+
+When connecting directly to an internal IP address:
+
+1. **TCP Layer**: Connection establishes successfully (from inside VNet)
+2. **TLS Handshake**: Client sends SNI (Server Name Indication) with the IP address
+3. **Certificate Validation**: FAILS because the SSL certificate is issued for `*.redis.azure.net`, not for `10.x.x.x`
+
+```
+SSL Error: certificate verify failed: IP address mismatch, certificate is not valid for '10.0.2.4'
+```
+
+### The SNI Solution
+
+SSL **succeeds** when using the public hostname for SNI while connecting to the internal IP:
+
+```python
+# This WORKS - hostname as SNI, internal IP as target
+ssl_context = ssl.create_default_context()
+sock = ssl_context.wrap_socket(raw_sock, server_hostname='redis-xxx.redis.azure.net')
+# sock.connect(('10.0.2.4', 8501))  # Internal IP
+```
+
+This is exactly why `DnsResolvers.UNRESOLVED` is critical in Lettuce - it preserves the hostname for SNI.
+
+### Why Address Remapping is Required
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     OSS Cluster Address Resolution Flow                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  1. Client connects to: redis-xxx.redis.azure.net:10000                    │
+│                              │                                              │
+│                              ▼                                              │
+│  2. Client runs: CLUSTER NODES                                              │
+│                              │                                              │
+│                              ▼                                              │
+│  3. Response contains:  10.0.2.4:8501 (master)                             │
+│                         10.0.2.4:8500 (replica)                            │
+│                              │                                              │
+│           ┌──────────────────┼──────────────────┐                          │
+│           │                  │                  │                          │
+│           ▼                  ▼                  ▼                          │
+│   ┌───────────────┐   ┌───────────────┐  ┌───────────────┐                │
+│   │ Without Remap │   │ With Remap    │  │ .NET/SE.Redis │                │
+│   ├───────────────┤   ├───────────────┤  ├───────────────┤                │
+│   │ Connect to    │   │ Map to public │  │ Multiplexer   │                │
+│   │ 10.0.2.4:8501 │   │ hostname:port │  │ routes via    │                │
+│   │               │   │               │  │ available     │                │
+│   │ ❌ FAILS      │   │ ✅ WORKS      │  │ connections   │                │
+│   │ (SSL/routing) │   │               │  │ ✅ WORKS      │                │
+│   └───────────────┘   └───────────────┘  └───────────────┘                │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Cross-Language Address Remapping
+
+Each language handles this differently:
+
+| Language | Library | Remapping Mechanism | Notes |
+|----------|---------|---------------------|-------|
+| **Java (Lettuce)** | Lettuce | `MappingSocketAddressResolver` | Uses `DnsResolvers.UNRESOLVED` for SNI |
+| **Java (Jedis)** | Jedis | `JedisClusterHostAndPortMap` | Custom host/port mapping |
+| **Python** | redis-py | `address_remap` callback | Function that transforms addresses |
+| **Node.js** | ioredis | `natMap` / `nodeAddressMap` | Dictionary-based mapping |
+| **Go** | go-redis | Custom `NewClient` wrapper | Address transformation in wrapper |
+| **.NET** | StackExchange.Redis | None (handled by multiplexer) | See section below |
+
+### .NET StackExchange.Redis: A Different Architecture
+
+Unlike other Redis clients, StackExchange.Redis does **not** need explicit address remapping:
+
+#### Why It Works Without MappingSocketAddressResolver
+
+1. **Multiplexer Architecture**: StackExchange.Redis uses a connection multiplexer that maintains connections and routes commands through available connections
+2. **Graceful Degradation**: When it fails to connect to internal IPs, it gracefully falls back to routing through established connections
+3. **Single Endpoint Focus**: The library primarily routes through the initial connection endpoint
+
+#### Trade-offs
+
+| Aspect | StackExchange.Redis | Other Libraries |
+|--------|--------------------|--------------------|
+| **Address Remapping** | Not required | Required |
+| **Configuration** | Simpler | More explicit |
+| **Failover Behavior** | May need extra handling | Explicit control |
+| **Internal IP Connections** | Fails silently, works anyway | Remapped to public endpoint |
+
+#### Code Comparison
+
+```csharp
+// .NET - No address remapping needed
+var redis = await ConnectionMultiplexer.ConnectAsync(new ConfigurationOptions
+{
+    EndPoints = { { hostname, port } },
+    Ssl = true,
+    // No MappingSocketAddressResolver equivalent needed!
+});
+```
+
+```java
+// Java Lettuce - Address remapping REQUIRED
+MappingSocketAddressResolver resolver = MappingSocketAddressResolver.create(
+    DnsResolvers.UNRESOLVED,  // Critical for SNI
+    hostAndPort -> HostAndPort.of(publicHostName, hostAndPort.getPort())
+);
+```
+
+---
 
 ## 🏛️ Architecture Components
 
@@ -417,7 +558,20 @@ ntpq -p
 
 **Cluster IP Mapping Issue:** With OSS cluster policy, Redis advertises internal IPs that aren't directly reachable.
 
-**Fix:** Configure `MappingSocketAddressResolver` (Lettuce) or `natMap` (ioredis) to map internal IPs back to the public hostname. The traffic still goes through the Azure proxy which routes to the correct internal node.
+**Root Cause Analysis:**
+- Internal IPs (10.x.x.x) are Azure VNet addresses
+- From **outside VNet**: These IPs are not routable (connection refused)
+- From **inside VNet**: TCP connects but SSL fails due to certificate mismatch
+
+**Fix:** Configure address remapping for your client library:
+- **Lettuce**: `MappingSocketAddressResolver`
+- **Jedis**: `JedisClusterHostAndPortMap`
+- **redis-py**: `address_remap` callback
+- **ioredis**: `natMap` configuration
+- **go-redis**: Custom `NewClient` wrapper
+- **.NET**: No remapping needed (multiplexer handles it)
+
+The traffic still goes through the Azure proxy which routes to the correct internal node.
 
 ### 6. "SSL certificate validation fails"
 

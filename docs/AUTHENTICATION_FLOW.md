@@ -176,6 +176,75 @@ client.set("key", "value")
 client.get("key")
 ```
 
+---
+
+## 🔗 OSS Cluster Policy: Extended Connection Flow
+
+When using **OSS Cluster policy**, there's an additional layer of complexity after initial connection:
+
+### Cluster Topology Discovery
+
+After authentication, cluster-aware clients discover the topology:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     OSS Cluster Authentication Extended Flow                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Step 1-9: [Standard Auth Flow] → Connection Established                   │
+│                              │                                              │
+│                              ▼                                              │
+│  Step 10: Client executes CLUSTER NODES                                    │
+│                              │                                              │
+│                              ▼                                              │
+│  Step 11: Redis returns node topology:                                     │
+│           10.0.2.4:8501 master 0-16383                                     │
+│           10.0.2.4:8500 replica                                            │
+│                              │                                              │
+│           ┌──────────────────┴──────────────────┐                          │
+│           ▼                                      ▼                          │
+│  ┌─────────────────────────┐        ┌─────────────────────────┐           │
+│  │ Without Address Remap   │        │ With Address Remap      │           │
+│  ├─────────────────────────┤        ├─────────────────────────┤           │
+│  │ Client tries:           │        │ Client remaps:          │           │
+│  │ connect(10.0.2.4:8501)  │        │ 10.0.2.4:* → host:*     │           │
+│  │                         │        │                         │           │
+│  │ From outside VNet:      │        │ Connects to:            │           │
+│  │ ❌ Not routable         │        │ public-hostname:port    │           │
+│  │                         │        │                         │           │
+│  │ From inside VNet:       │        │ Azure proxy routes to   │           │
+│  │ ❌ SSL cert mismatch    │        │ correct internal node   │           │
+│  └─────────────────────────┘        │                         │           │
+│                                     │ ✅ Works from anywhere  │           │
+│                                     └─────────────────────────┘           │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Why Internal IPs Are Returned
+
+Azure Managed Redis operates within Azure's VNet infrastructure:
+
+1. **CLUSTER NODES** returns internal addresses (`10.x.x.x`) that nodes use for inter-node communication
+2. These addresses are **not directly reachable** from client applications
+3. The Azure proxy intercepts connections to the public hostname and routes to the correct internal node
+
+### Authentication on Redirects
+
+When a client receives a `MOVED` redirect:
+
+```
+MOVED 12345 10.0.2.4:8501
+```
+
+With proper address remapping:
+1. Client remaps `10.0.2.4:8501` → `public-hostname:8501`
+2. Client connects to public hostname on port 8501
+3. Azure proxy routes to the internal node
+4. **Re-authentication occurs** on the new connection (same token, new AUTH command)
+
+---
+
 ## 🔄 Token Refresh Flow
 
 After initial connection, the client library automatically refreshes tokens:

@@ -50,6 +50,21 @@ The following languages are supported by Redis but examples are not yet availabl
 
 > **Cluster Policy Support:** All examples auto-detect the `REDIS_CLUSTER_POLICY` environment variable and use the appropriate client (standard vs cluster-aware with address remapping for OSS Cluster).
 
+### OSS Cluster: Address Remapping by Language
+
+When using OSS Cluster policy, each language handles internal IP remapping differently:
+
+| Language | Remapping Mechanism | Notes |
+|----------|---------------------|-------|
+| Java (Lettuce) | `MappingSocketAddressResolver` | Requires `DnsResolvers.UNRESOLVED` for SNI |
+| Java (Jedis) | `JedisClusterHostAndPortMap` | Custom host/port mapping |
+| Python | `address_remap` callback | Function transforms addresses |
+| Node.js | `nodeAddressMap` | Dictionary-based mapping |
+| Go | Custom `NewClient` wrapper | Address transformation in wrapper |
+| .NET | None needed | Multiplexer architecture handles gracefully |
+
+> 📖 **Deep Dive:** See [HOW_IT_WORKS.md - Internal IP Connectivity](./docs/HOW_IT_WORKS.md#internal-ip-connectivity-deep-dive) for detailed connectivity test results and why each approach is needed.
+
 ## 🏗️ Repository Structure
 
 ```

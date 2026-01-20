@@ -24,6 +24,9 @@ param managedIdentityPrincipalId string
 @description('Client ID of the managed identity (for alias)')
 param managedIdentityClientId string
 
+@description('Enable High Availability (replica nodes)')
+param highAvailability bool = true
+
 // Azure Managed Redis (preview API)
 resource redis 'Microsoft.Cache/redisEnterprise@2024-09-01-preview' = {
   name: name
@@ -34,6 +37,7 @@ resource redis 'Microsoft.Cache/redisEnterprise@2024-09-01-preview' = {
   }
   properties: {
     minimumTlsVersion: '1.2'
+    highAvailability: highAvailability ? 'Enabled' : 'Disabled'
   }
 }
 

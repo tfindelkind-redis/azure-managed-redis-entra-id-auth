@@ -12,7 +12,10 @@
       "value": "${VM_ADMIN_PASSWORD}"
     },
     "redisSku": {
-      "value": "MemoryOptimized_M10"
+      "value": "${REDIS_SKU=Balanced_B5}"
+    },
+    "redisClusterPolicy": {
+      "value": "${REDIS_CLUSTER_POLICY=EnterpriseCluster}"
     },
     "enableClusterMode": {
       "value": true
