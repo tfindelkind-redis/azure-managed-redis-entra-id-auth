@@ -151,8 +151,57 @@ REDIS_HOSTNAME=$(echo "$OUTPUTS" | jq -r '.REDIS_HOSTNAME.value // empty')
 REDIS_PORT=$(echo "$OUTPUTS" | jq -r '.REDIS_PORT.value // empty')
 AZURE_MANAGED_IDENTITY_CLIENT_ID=$(echo "$OUTPUTS" | jq -r '.AZURE_MANAGED_IDENTITY_CLIENT_ID.value // empty')
 AZURE_MANAGED_IDENTITY_PRINCIPAL_ID=$(echo "$OUTPUTS" | jq -r '.AZURE_MANAGED_IDENTITY_PRINCIPAL_ID.value // empty')
+VM_SYSTEM_ASSIGNED_PRINCIPAL_ID=$(echo "$OUTPUTS" | jq -r '.VM_SYSTEM_ASSIGNED_PRINCIPAL_ID.value // empty')
 VM_NAME=$(echo "$OUTPUTS" | jq -r '.VM_NAME.value // empty')
 VM_PUBLIC_IP=$(echo "$OUTPUTS" | jq -r '.VM_PUBLIC_IP.value // empty')
+
+# Extract Redis cluster name from hostname
+REDIS_CLUSTER_NAME=$(echo "$REDIS_HOSTNAME" | cut -d'.' -f1)
+
+# Create Service Principal for testing non-MI scenarios
+echo ""
+echo -e "${BLUE}🔑 Creating Service Principal for Entra ID auth testing...${NC}"
+SP_NAME="sp-redis-${AZURE_ENV_NAME}"
+
+# Check if service principal already exists
+EXISTING_APP_ID=$(az ad app list --display-name "$SP_NAME" --query "[0].appId" -o tsv 2>/dev/null || echo "")
+
+if [ -n "$EXISTING_APP_ID" ] && [ "$EXISTING_APP_ID" != "null" ] && [ "$EXISTING_APP_ID" != "" ]; then
+    echo -e "${YELLOW}ℹ️  Service principal already exists: $SP_NAME${NC}"
+    SP_CLIENT_ID=$EXISTING_APP_ID
+    SP_OBJECT_ID=$(az ad sp list --filter "appId eq '$SP_CLIENT_ID'" --query "[0].id" -o tsv)
+    SP_TENANT_ID=$(az account show --query "tenantId" -o tsv)
+    
+    # Create new secret
+    echo -e "${BLUE}   Creating new client secret...${NC}"
+    SP_SECRET=$(az ad app credential reset --id "$SP_CLIENT_ID" --append --years 1 --query "password" -o tsv)
+else
+    echo -e "${BLUE}   Creating new service principal...${NC}"
+    SP_RESULT=$(az ad sp create-for-rbac --name "$SP_NAME" --years 1 --query "{appId:appId, password:password, tenant:tenant}" -o json)
+    SP_CLIENT_ID=$(echo $SP_RESULT | jq -r '.appId')
+    SP_SECRET=$(echo $SP_RESULT | jq -r '.password')
+    SP_TENANT_ID=$(echo $SP_RESULT | jq -r '.tenant')
+    SP_OBJECT_ID=$(az ad sp list --filter "appId eq '$SP_CLIENT_ID'" --query "[0].id" -o tsv)
+fi
+
+echo -e "${GREEN}✅ Service Principal: $SP_NAME${NC}"
+echo -e "   Client ID: ${GREEN}${SP_CLIENT_ID:0:8}...${NC}"
+echo -e "   Object ID: ${GREEN}${SP_OBJECT_ID:0:8}...${NC}"
+
+# Create Redis access policy for Service Principal
+echo ""
+echo -e "${BLUE}🔐 Creating Redis access policy for Service Principal...${NC}"
+az redisenterprise database access-policy-assignment create \
+    --cluster-name "$REDIS_CLUSTER_NAME" \
+    --resource-group "$RESOURCE_GROUP" \
+    --database-name "default" \
+    --access-policy-assignment-name "service-principal-access" \
+    --access-policy-name "default" \
+    --object-id "$SP_OBJECT_ID" \
+    --object-id-alias "$SP_NAME" \
+    --subscription "$AZURE_SUBSCRIPTION_ID" \
+    --output none 2>/dev/null || echo -e "${YELLOW}   (Access policy may already exist)${NC}"
+echo -e "${GREEN}✅ Service Principal access policy configured${NC}"
 
 # Save to azd environment
 if command -v azd &> /dev/null; then
@@ -161,9 +210,14 @@ if command -v azd &> /dev/null; then
     azd env set REDIS_PORT "$REDIS_PORT" 2>/dev/null || true
     azd env set AZURE_MANAGED_IDENTITY_CLIENT_ID "$AZURE_MANAGED_IDENTITY_CLIENT_ID" 2>/dev/null || true
     azd env set AZURE_MANAGED_IDENTITY_PRINCIPAL_ID "$AZURE_MANAGED_IDENTITY_PRINCIPAL_ID" 2>/dev/null || true
+    azd env set VM_SYSTEM_ASSIGNED_PRINCIPAL_ID "$VM_SYSTEM_ASSIGNED_PRINCIPAL_ID" 2>/dev/null || true
     azd env set VM_NAME "$VM_NAME" 2>/dev/null || true
     azd env set VM_PUBLIC_IP "$VM_PUBLIC_IP" 2>/dev/null || true
     azd env set REDIS_CLUSTER_POLICY "$REDIS_CLUSTER_POLICY" 2>/dev/null || true
+    azd env set SERVICE_PRINCIPAL_CLIENT_ID "$SP_CLIENT_ID" 2>/dev/null || true
+    azd env set SERVICE_PRINCIPAL_CLIENT_SECRET "$SP_SECRET" 2>/dev/null || true
+    azd env set SERVICE_PRINCIPAL_TENANT_ID "$SP_TENANT_ID" 2>/dev/null || true
+    azd env set SERVICE_PRINCIPAL_OBJECT_ID "$SP_OBJECT_ID" 2>/dev/null || true
 fi
 
 # Print summary
@@ -177,9 +231,20 @@ echo -e "  Hostname:       ${GREEN}$REDIS_HOSTNAME${NC}"
 echo -e "  Port:           ${GREEN}$REDIS_PORT${NC}"
 echo -e "  Cluster Policy: ${GREEN}$REDIS_CLUSTER_POLICY${NC}"
 echo ""
-echo -e "${BLUE}Managed Identity:${NC}"
-echo -e "  Client ID:      ${GREEN}$AZURE_MANAGED_IDENTITY_CLIENT_ID${NC}"
-echo -e "  Principal ID:   ${GREEN}$AZURE_MANAGED_IDENTITY_PRINCIPAL_ID${NC}"
+echo -e "${BLUE}Authentication Methods Configured:${NC}"
+echo ""
+echo -e "  ${YELLOW}1. User-Assigned Managed Identity${NC}"
+echo -e "     Client ID:    ${GREEN}$AZURE_MANAGED_IDENTITY_CLIENT_ID${NC}"
+echo -e "     Principal ID: ${GREEN}$AZURE_MANAGED_IDENTITY_PRINCIPAL_ID${NC}"
+echo ""
+echo -e "  ${YELLOW}2. System-Assigned Managed Identity (VM)${NC}"
+echo -e "     Principal ID: ${GREEN}$VM_SYSTEM_ASSIGNED_PRINCIPAL_ID${NC}"
+echo -e "     (No Client ID needed - auto-detected on VM)"
+echo ""
+echo -e "  ${YELLOW}3. Service Principal${NC}"
+echo -e "     Client ID:    ${GREEN}$SP_CLIENT_ID${NC}"
+echo -e "     Tenant ID:    ${GREEN}$SP_TENANT_ID${NC}"
+echo -e "     Secret:       ${GREEN}(saved to azd environment)${NC}"
 echo ""
 echo -e "${BLUE}Test VM:${NC}"
 echo -e "  Name:           ${GREEN}$VM_NAME${NC}"

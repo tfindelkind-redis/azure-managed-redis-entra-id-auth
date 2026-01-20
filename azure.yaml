@@ -6,11 +6,14 @@ name: redis-entra-id-test-env
 metadata:
   template: redis-entra-id-test-env@0.0.1
 
-# Note: This project uses custom deployment scripts for infrastructure
-# The script handles the full deployment because:
-# - Redis can take 15-20+ minutes to provision
-# - Access policy assignments need Redis to be fully provisioned first
-# - We need to save outputs to azd env for test scripts
+# Note: This project uses Bicep for core infrastructure and a post-provision hook for:
+# - Service Principal creation (requires Microsoft Graph API, not available in Bicep)
+# - Redis access policy assignment for the Service Principal
+#
+# The deployment creates 3 authentication methods:
+# 1. User-Assigned Managed Identity (for specific identity control)
+# 2. System-Assigned Managed Identity (simplest, auto-created on VM)
+# 3. Service Principal (for non-Azure environments, CI/CD)
 #
 # Usage:
 #   azd up                              # Deploy infrastructure
@@ -27,6 +30,14 @@ infra:
   provider: bicep
   path: ./infra
   module: main
+
+# Hooks for additional configuration
+hooks:
+  postprovision:
+    shell: sh
+    run: ./infra/scripts/postprovision.sh
+    interactive: false
+    continueOnError: false
 
 # No application services - this is infrastructure-only for testing
 # The VM will be used to run the example code manually

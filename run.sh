@@ -38,6 +38,12 @@ load_azd_env() {
         VM_PUBLIC_IP=$(azd env get-value VM_PUBLIC_IP 2>/dev/null || echo "")
         VM_ADMIN_PASSWORD=$(azd env get-value VM_ADMIN_PASSWORD 2>/dev/null || echo "")
         REDIS_CLUSTER_POLICY=$(azd env get-value REDIS_CLUSTER_POLICY 2>/dev/null || echo "EnterpriseCluster")
+        # Service Principal credentials
+        SERVICE_PRINCIPAL_CLIENT_ID=$(azd env get-value SERVICE_PRINCIPAL_CLIENT_ID 2>/dev/null || echo "")
+        SERVICE_PRINCIPAL_CLIENT_SECRET=$(azd env get-value SERVICE_PRINCIPAL_CLIENT_SECRET 2>/dev/null || echo "")
+        SERVICE_PRINCIPAL_TENANT_ID=$(azd env get-value SERVICE_PRINCIPAL_TENANT_ID 2>/dev/null || echo "")
+        # System-assigned identity
+        VM_SYSTEM_ASSIGNED_PRINCIPAL_ID=$(azd env get-value VM_SYSTEM_ASSIGNED_PRINCIPAL_ID 2>/dev/null || echo "")
     fi
 }
 
@@ -77,8 +83,26 @@ show_status() {
     echo -e "  Port:           ${GREEN}$REDIS_PORT${NC}"
     echo -e "  Cluster Policy: ${GREEN}$REDIS_CLUSTER_POLICY${NC}"
     echo ""
-    echo -e "${CYAN}Managed Identity:${NC}"
-    echo -e "  Client ID:      ${GREEN}$AZURE_CLIENT_ID${NC}"
+    echo -e "${CYAN}Authentication Methods:${NC}"
+    echo ""
+    echo -e "  ${YELLOW}1. User-Assigned Managed Identity${NC}"
+    echo -e "     Client ID: ${GREEN}$AZURE_CLIENT_ID${NC}"
+    echo ""
+    echo -e "  ${YELLOW}2. System-Assigned Managed Identity${NC}"
+    if [ -n "$VM_SYSTEM_ASSIGNED_PRINCIPAL_ID" ]; then
+        echo -e "     Principal ID: ${GREEN}$VM_SYSTEM_ASSIGNED_PRINCIPAL_ID${NC}"
+    else
+        echo -e "     Principal ID: ${YELLOW}(Available on VM, no env var needed)${NC}"
+    fi
+    echo ""
+    echo -e "  ${YELLOW}3. Service Principal${NC}"
+    if [ -n "$SERVICE_PRINCIPAL_CLIENT_ID" ]; then
+        echo -e "     Client ID: ${GREEN}$SERVICE_PRINCIPAL_CLIENT_ID${NC}"
+        echo -e "     Tenant ID: ${GREEN}$SERVICE_PRINCIPAL_TENANT_ID${NC}"
+        echo -e "     Secret:    ${GREEN}(stored in azd env)${NC}"
+    else
+        echo -e "     ${YELLOW}(Not configured - run 'azd provision' or post-provision hook)${NC}"
+    fi
     echo ""
     echo -e "${CYAN}Test VM:${NC}"
     echo -e "  Public IP:      ${GREEN}$VM_PUBLIC_IP${NC}"
@@ -232,12 +256,11 @@ run_dotnet() {
 # Run Java Lettuce example (auto-detects cluster policy)
 run_java() {
     local cluster_mode="${1:-auto}"
-    local main_class="com.example.ManagedIdentityExample"
+    local main_class="com.example.UserAssignedManagedIdentityExample"
     local policy_suffix=""
     
-    # Determine which example to run
+    # All examples support both cluster policies now
     if [ "$cluster_mode" = "cluster" ] || ([ "$cluster_mode" = "auto" ] && [ "$REDIS_CLUSTER_POLICY" = "OSSCluster" ]); then
-        main_class="com.example.ClusterManagedIdentityExample"
         policy_suffix=" (OSS Cluster)"
     fi
     
@@ -266,9 +289,8 @@ run_jedis() {
     local main_class="com.example.ManagedIdentityExample"
     local policy_suffix=""
     
-    # Determine which example to run
+    # All examples support both cluster policies now
     if [ "$cluster_mode" = "cluster" ] || ([ "$cluster_mode" = "auto" ] && [ "$REDIS_CLUSTER_POLICY" = "OSSCluster" ]); then
-        main_class="com.example.ClusterManagedIdentityExample"
         policy_suffix=" (OSS Cluster)"
     fi
     

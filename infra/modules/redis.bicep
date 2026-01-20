@@ -55,11 +55,11 @@ resource database 'Microsoft.Cache/redisEnterprise/databases@2024-09-01-preview'
   }
 }
 
-// Access policy assignment for the managed identity
+// Access policy assignment for the user-assigned managed identity
 // This grants the managed identity access to Redis using Entra ID
 resource accessPolicy 'Microsoft.Cache/redisEnterprise/databases/accessPolicyAssignments@2024-09-01-preview' = {
   parent: database
-  name: 'managed-identity-access'
+  name: 'user-assigned-mi-access'
   properties: {
     accessPolicyName: 'default'  // Data Owner - Full access
     user: {

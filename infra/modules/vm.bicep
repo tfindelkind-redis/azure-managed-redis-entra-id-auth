@@ -57,12 +57,13 @@ resource nic 'Microsoft.Network/networkInterfaces@2023-05-01' = {
 }
 
 // VM with Ubuntu and all required runtimes for testing
+// Enabled both System-Assigned and User-Assigned managed identities
 resource vm 'Microsoft.Compute/virtualMachines@2023-07-01' = {
   name: name
   location: location
   tags: tags
   identity: {
-    type: 'UserAssigned'
+    type: 'SystemAssigned, UserAssigned'
     userAssignedIdentities: {
       '${managedIdentityId}': {}
     }
@@ -122,3 +123,4 @@ resource vmExtension 'Microsoft.Compute/virtualMachines/extensions@2023-07-01' =
 output id string = vm.id
 output name string = vm.name
 output publicIpAddress string = publicIp.properties.ipAddress
+output systemAssignedPrincipalId string = vm.identity.principalId

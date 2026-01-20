@@ -19,7 +19,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.Set;
 
 /**
- * Azure Managed Redis - Managed Identity Authentication Example (Lettuce)
+ * Azure Managed Redis - User-Assigned Managed Identity Authentication (Lettuce)
  * 
  * This example demonstrates how to connect to Azure Managed Redis using
  * a User-Assigned Managed Identity with Entra ID authentication.
@@ -36,7 +36,7 @@ import java.util.Set;
  * - REDIS_PORT: Port (default: 10000)
  * - REDIS_CLUSTER_POLICY: "EnterpriseCluster" or "OSSCluster" (default: EnterpriseCluster)
  */
-public class ManagedIdentityExample {
+public class UserAssignedManagedIdentityExample {
     
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final String REDIS_SCOPE = "https://redis.azure.com";
@@ -61,7 +61,7 @@ public class ManagedIdentityExample {
         boolean isOSSCluster = "OSSCluster".equalsIgnoreCase(clusterPolicy);
 
         System.out.println("\n" + "=".repeat(60));
-        System.out.println("AZURE MANAGED REDIS - LETTUCE MANAGED IDENTITY AUTH DEMO");
+        System.out.println("AZURE MANAGED REDIS - USER-ASSIGNED MANAGED IDENTITY (LETTUCE)");
         System.out.println("Cluster Policy: " + clusterPolicy + (isOSSCluster ? " (cluster-aware)" : " (standard)"));
         System.out.println("=".repeat(60) + "\n");
 

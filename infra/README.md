@@ -16,6 +16,32 @@ This directory contains Azure Developer CLI (`azd`) compatible Bicep templates f
    - Go 1.22
    - Azure CLI
    - NTP (for time sync - critical for Entra ID!)
+6. **Service Principal** - Created via post-provision hook for testing non-MI scenarios
+
+## Authentication Methods Configured
+
+The deployment automatically configures **three** authentication methods for Redis:
+
+| Method | What It Is | When to Use |
+|--------|------------|-------------|
+| **User-Assigned Managed Identity** | Explicit identity created and assigned to VM | Azure resources where you need control over which identity is used |
+| **System-Assigned Managed Identity** | Auto-created identity on the VM | Simplest option for Azure VMs/App Services |
+| **Service Principal** | App Registration with client secret | Non-Azure environments, CI/CD pipelines, local development |
+
+### Environment Variables by Auth Method
+
+```bash
+# 1. User-Assigned Managed Identity
+export AZURE_CLIENT_ID="<from azd env get-values>"
+
+# 2. System-Assigned Managed Identity
+# No environment variables needed - auto-detected on the VM
+
+# 3. Service Principal  
+export AZURE_CLIENT_ID="<SERVICE_PRINCIPAL_CLIENT_ID from azd env>"
+export AZURE_CLIENT_SECRET="<SERVICE_PRINCIPAL_CLIENT_SECRET from azd env>"
+export AZURE_TENANT_ID="<SERVICE_PRINCIPAL_TENANT_ID from azd env>"
+```
 
 ## Prerequisites
 

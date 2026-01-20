@@ -24,76 +24,6 @@ Add to your `pom.xml`:
 </dependencies>
 ```
 
-## 🔑 Authentication Options
-
-### Option 1: User-Assigned Managed Identity
-
-```java
-import redis.clients.authentication.entraid.EntraIDTokenAuthConfigBuilder;
-import redis.clients.authentication.core.TokenBasedRedisCredentialsProvider;
-import redis.clients.authentication.entraid.UserManagedIdentityType;
-import io.lettuce.core.*;
-import io.lettuce.core.api.sync.RedisCommands;
-
-// Create credentials provider
-TokenBasedRedisCredentialsProvider credentials;
-try (EntraIDTokenAuthConfigBuilder builder = EntraIDTokenAuthConfigBuilder.builder()) {
-    builder.userAssignedManagedIdentity(
-        UserManagedIdentityType.CLIENT_ID,
-        System.getenv("AZURE_CLIENT_ID")
-    );
-    credentials = TokenBasedRedisCredentialsProvider.create(builder.build());
-}
-
-// Enable automatic re-authentication
-ClientOptions clientOptions = ClientOptions.builder()
-    .reauthenticateBehavior(ClientOptions.ReauthenticateBehavior.ON_NEW_CREDENTIALS)
-    .build();
-
-// Build Redis URI with authentication
-RedisURI redisURI = RedisURI.builder()
-    .withHost("your-redis.region.redis.azure.net")
-    .withPort(10000)
-    .withAuthentication(credentials)
-    .withSsl(true)
-    .build();
-
-// Connect
-RedisClient redisClient = RedisClient.create(redisURI);
-redisClient.setOptions(clientOptions);
-
-try (StatefulRedisConnection<String, String> connection = redisClient.connect()) {
-    RedisCommands<String, String> commands = connection.sync();
-    System.out.println("PING: " + commands.ping());
-} finally {
-    redisClient.shutdown();
-    credentials.close();
-}
-```
-
-### Option 2: System-Assigned Managed Identity
-
-```java
-try (EntraIDTokenAuthConfigBuilder builder = EntraIDTokenAuthConfigBuilder.builder()) {
-    builder.systemAssignedManagedIdentity();
-    credentials = TokenBasedRedisCredentialsProvider.create(builder.build());
-}
-```
-
-### Option 3: Service Principal
-
-```java
-try (EntraIDTokenAuthConfigBuilder builder = EntraIDTokenAuthConfigBuilder.builder()) {
-    builder
-        .clientId(System.getenv("AZURE_CLIENT_ID"))
-        .secret(System.getenv("AZURE_CLIENT_SECRET"))
-        .authority("https://login.microsoftonline.com/" + System.getenv("AZURE_TENANT_ID"))
-        .scopes(Set.of("https://redis.azure.com/.default"));
-    
-    credentials = TokenBasedRedisCredentialsProvider.create(builder.build());
-}
-```
-
 ## 📁 Project Structure
 
 ```
@@ -105,72 +35,132 @@ java-lettuce/
         └── java/
             └── com/
                 └── example/
-                    ├── ManagedIdentityExample.java        # Multi-mode (Enterprise + OSS)
-                    └── ClusterManagedIdentityExample.java # OSS Cluster dedicated
+                    ├── UserAssignedManagedIdentityExample.java   # User-Assigned MI
+                    ├── SystemAssignedManagedIdentityExample.java # System-Assigned MI
+                    └── ServicePrincipalExample.java              # Service Principal
 ```
 
-### Why Two Files?
+## 🔑 Authentication Options
 
-| File | Cluster Policy | Used By | Purpose |
-|------|---------------|---------|---------|
-| **ManagedIdentityExample.java** | Both | Manual testing | Single file supporting both policies via `REDIS_CLUSTER_POLICY` env var |
-| **ClusterManagedIdentityExample.java** | OSS Cluster | `run.sh` | Dedicated OSS implementation with detailed documentation and MOVED handling demo |
+All three examples support **both** cluster policies (Enterprise and OSS Cluster).
 
-**When to use which:**
-- **`ManagedIdentityExample.java`**: Best for understanding how to write code that works with either cluster policy. Auto-detects and switches between `RedisClient` (Enterprise) and `RedisClusterClient` (OSS).
-- **`ClusterManagedIdentityExample.java`**: Best for understanding OSS Cluster specifics - includes extensive comments explaining MappingSocketAddressResolver, SSL/SNI, and MOVED handling.
+| File | Auth Type | Required Env Vars | Use Case |
+|------|-----------|-------------------|----------|
+| **UserAssignedManagedIdentityExample.java** | User-Assigned MI | `AZURE_CLIENT_ID` | Azure resources with specific identity |
+| **SystemAssignedManagedIdentityExample.java** | System-Assigned MI | None | Azure VMs/App Services with auto identity |
+| **ServicePrincipalExample.java** | Service Principal | `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID` | Non-Azure, CI/CD, local dev |
+
+### Common Environment Variables
+
+```bash
+export REDIS_HOSTNAME="your-redis.region.redis.azure.net"
+export REDIS_PORT=10000  # Optional, default is 10000
+export REDIS_CLUSTER_POLICY="OSSCluster"  # or "EnterpriseCluster" (default)
+```
+
+---
+
+### Option 1: User-Assigned Managed Identity
+
+Best for Azure resources where you want to control which identity is used.
+
+```java
+try (EntraIDTokenAuthConfigBuilder builder = EntraIDTokenAuthConfigBuilder.builder()) {
+    builder.userAssignedManagedIdentity(
+        ManagedIdentityInfo.UserManagedIdentityType.CLIENT_ID,
+        System.getenv("AZURE_CLIENT_ID")
+    );
+    builder.scopes(Set.of("https://redis.azure.com"));
+    credentials = TokenBasedRedisCredentialsProvider.create(builder.build());
+}
+```
+
+**Run:**
+```bash
+export AZURE_CLIENT_ID="your-managed-identity-client-id"
+mvn exec:java -Dexec.mainClass="com.example.UserAssignedManagedIdentityExample"
+```
+
+---
+
+### Option 2: System-Assigned Managed Identity
+
+Simplest option for Azure VMs and App Services - no client ID needed.
+
+```java
+try (EntraIDTokenAuthConfigBuilder builder = EntraIDTokenAuthConfigBuilder.builder()) {
+    builder.systemAssignedManagedIdentity();
+    builder.scopes(Set.of("https://redis.azure.com"));
+    credentials = TokenBasedRedisCredentialsProvider.create(builder.build());
+}
+```
+
+**Run:**
+```bash
+# No AZURE_CLIENT_ID needed - Azure provides the identity automatically
+mvn exec:java -Dexec.mainClass="com.example.SystemAssignedManagedIdentityExample"
+```
+
+---
+
+### Option 3: Service Principal
+
+Best for non-Azure environments, CI/CD pipelines, and local development.
+
+```java
+try (EntraIDTokenAuthConfigBuilder builder = EntraIDTokenAuthConfigBuilder.builder()) {
+    builder.clientId(System.getenv("AZURE_CLIENT_ID"))
+           .secret(System.getenv("AZURE_CLIENT_SECRET"))
+           .authority("https://login.microsoftonline.com/" + System.getenv("AZURE_TENANT_ID"))
+           .scopes(Set.of("https://redis.azure.com/.default"));
+    credentials = TokenBasedRedisCredentialsProvider.create(builder.build());
+}
+```
+
+**Run:**
+```bash
+export AZURE_CLIENT_ID="your-app-registration-client-id"
+export AZURE_CLIENT_SECRET="your-app-registration-secret"
+export AZURE_TENANT_ID="your-tenant-id"
+mvn exec:java -Dexec.mainClass="com.example.ServicePrincipalExample"
+```
+
+---
 
 ## 🔧 Cluster Policy Support
 
-The `ManagedIdentityExample.java` automatically detects the cluster policy via the `REDIS_CLUSTER_POLICY` environment variable:
+All examples auto-detect cluster policy via `REDIS_CLUSTER_POLICY` environment variable:
 
 - **EnterpriseCluster** (default): Uses `RedisClient` - server handles slot routing
-- **OSSCluster**: Uses `RedisClusterClient` with `MappingSocketAddressResolver` for SSL/SNI validation
+- **OSSCluster**: Uses `RedisClusterClient` with `MappingSocketAddressResolver` for SSL/SNI
 
 ```java
-// The example auto-detects and uses the appropriate client
-String clusterPolicy = System.getenv().getOrDefault("REDIS_CLUSTER_POLICY", "EnterpriseCluster");
-if ("OSSCluster".equalsIgnoreCase(clusterPolicy)) {
-    // Use RedisClusterClient with MappingSocketAddressResolver
-    runWithClusterClient(clientId, redisHost, redisPort);
+boolean isOSSCluster = "OSSCluster".equalsIgnoreCase(clusterPolicy);
+if (isOSSCluster) {
+    runWithClusterClient(...);  // RedisClusterClient with address remapping
 } else {
-    // Use standard RedisClient
-    runWithStandardClient(clientId, redisHost, redisPort);
+    runWithStandardClient(...); // Standard RedisClient
 }
 ```
 
 ### OSS Cluster: MOVED Handling
 
-With OSS Cluster policy, Redis returns `MOVED` responses when keys are on different shards. The `ClusterManagedIdentityExample.java` demonstrates this:
+With OSS Cluster policy, Redis returns `MOVED` responses when keys are on different shards. All examples demonstrate this:
 
-```java
-// Calculate key slots using CRC16 (same algorithm Redis uses)
-long slot = io.lettuce.core.cluster.SlotHash.getSlot("user:1000");  // slot 1649
-
-// Lettuce ClusterClient handles MOVED redirects automatically
-// Keys on different shards are routed transparently:
-commands.setex("key:{A}", 30, "value1");  // slot 6373 -> shard 1
-commands.setex("key:{B}", 30, "value2");  // slot 10374 -> shard 2
-```
-
-Example output showing MOVED handling:
 ```
 Cluster slot distribution:
   Primary 1: 10.0.2.4:8501 (slots: 0-8191)
   Primary 2: 10.0.2.4:8500 (slots: 8192-16383)
 
-Key slot calculations:
-  Key 'user:1000' -> slot 1649
-  Key 'session:abc' -> slot 14788
-
-✅ Wrote 'lettuce-moved-test:{A}' (slot 6373)
-✅ Wrote 'lettuce-moved-test:{B}' (slot 10374)
-→ Lettuce ClusterClient handled MOVED redirects automatically!
+Writing keys to different shards (transparent MOVED handling):
+  ✅ Wrote 'lettuce-test:{A}' (slot 6373)
+  ✅ Wrote 'lettuce-test:{B}' (slot 10374)
+  → Lettuce ClusterClient handled MOVED redirects automatically!
 ```
 
 ### MappingSocketAddressResolver for SSL/SNI
 
-OSS Cluster returns internal IPs (e.g., `10.0.2.4:8500`) which would fail SSL certificate validation. The `MappingSocketAddressResolver` maps these to the public hostname:
+OSS Cluster returns internal IPs (e.g., `10.0.2.4:8500`) which would fail SSL certificate validation. All examples use `MappingSocketAddressResolver` to map these to the public hostname:
 
 ```java
 MappingSocketAddressResolver resolver = MappingSocketAddressResolver.create(
@@ -185,32 +175,43 @@ MappingSocketAddressResolver resolver = MappingSocketAddressResolver.create(
 );
 ```
 
+---
+
 ## 🔧 Building and Running
 
 ```bash
 # Build
-mvn clean package
+mvn clean compile
 
-# Run with managed identity
-java -cp target/lettuce-entra-example-1.0.jar com.example.ManagedIdentityExample
+# Run User-Assigned Managed Identity example
+export AZURE_CLIENT_ID="your-managed-identity-client-id"
+export REDIS_HOSTNAME="your-redis.region.redis.azure.net"
+mvn exec:java -Dexec.mainClass="com.example.UserAssignedManagedIdentityExample"
 
-# Run with service principal
-export AZURE_CLIENT_ID="your-client-id"
-export AZURE_CLIENT_SECRET="your-secret"
+# Run System-Assigned Managed Identity example (on Azure VM)
+export REDIS_HOSTNAME="your-redis.region.redis.azure.net"
+mvn exec:java -Dexec.mainClass="com.example.SystemAssignedManagedIdentityExample"
+
+# Run Service Principal example
+export AZURE_CLIENT_ID="your-app-client-id"
+export AZURE_CLIENT_SECRET="your-app-secret"
 export AZURE_TENANT_ID="your-tenant-id"
 export REDIS_HOSTNAME="your-redis.region.redis.azure.net"
-java -cp target/lettuce-entra-example-1.0.jar com.example.ServicePrincipalExample
+mvn exec:java -Dexec.mainClass="com.example.ServicePrincipalExample"
 ```
+
+---
 
 ## 🔧 Key Features
 
 ### Automatic Re-authentication
 
-Lettuce supports automatic re-authentication when tokens are refreshed:
+All examples enable automatic re-authentication when tokens are refreshed:
 
 ```java
 ClientOptions clientOptions = ClientOptions.builder()
     .reauthenticateBehavior(ClientOptions.ReauthenticateBehavior.ON_NEW_CREDENTIALS)
+    .socketOptions(SocketOptions.builder().keepAlive(true).build())
     .build();
 ```
 
@@ -222,6 +223,8 @@ credentials.resolveCredentials()
     .doOnNext(c -> System.out.println("Username: " + c.getUsername()))
     .block();
 ```
+
+---
 
 ## 📚 Resources
 

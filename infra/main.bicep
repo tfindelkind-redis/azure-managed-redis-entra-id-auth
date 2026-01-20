@@ -111,6 +111,18 @@ module vm './modules/vm.bicep' = {
   }
 }
 
+// Access policy for VM's system-assigned managed identity
+// The parameters automatically create dependencies on redis and vm modules
+module vmSystemIdentityAccessPolicy './modules/redis-access-policy.bicep' = {
+  name: 'vm-system-identity-access-policy'
+  scope: rg
+  params: {
+    redisClusterName: redis.outputs.name
+    principalId: vm.outputs.systemAssignedPrincipalId
+    accessPolicyAssignmentName: 'vm-system-identity-access'
+  }
+}
+
 // Outputs for use in testing
 output AZURE_RESOURCE_GROUP string = rg.name
 output AZURE_LOCATION string = location
@@ -119,6 +131,7 @@ output REDIS_PORT int = redis.outputs.port
 output REDIS_CLUSTER_POLICY string = redisClusterPolicy
 output AZURE_MANAGED_IDENTITY_CLIENT_ID string = useExistingIdentity ? existingManagedIdentityClientId : managedIdentity.outputs.clientId
 output AZURE_MANAGED_IDENTITY_PRINCIPAL_ID string = useExistingIdentity ? existingManagedIdentityPrincipalId : managedIdentity.outputs.principalId
+output VM_SYSTEM_ASSIGNED_PRINCIPAL_ID string = vm.outputs.systemAssignedPrincipalId
 output VM_NAME string = vm.outputs.name
 output VM_PUBLIC_IP string = vm.outputs.publicIpAddress
 output VM_ADMIN_USERNAME string = vmAdminUsername

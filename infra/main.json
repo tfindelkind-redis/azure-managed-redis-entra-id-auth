@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.39.26.7824",
-      "templateHash": "1115276801817009842"
+      "templateHash": "4549848513475953819"
     }
   },
   "parameters": {
@@ -19,6 +19,7 @@
     },
     "location": {
       "type": "string",
+      "defaultValue": "westus3",
       "minLength": 1,
       "metadata": {
         "description": "Primary location for all resources"
@@ -28,6 +29,9 @@
       "type": "string",
       "defaultValue": "Balanced_B5",
       "allowedValues": [
+        "Balanced_B0",
+        "Balanced_B1",
+        "Balanced_B3",
         "Balanced_B5",
         "Balanced_B10",
         "Balanced_B20",
@@ -38,7 +42,7 @@
         "ComputeOptimized_X10"
       ],
       "metadata": {
-        "description": "Azure Managed Redis SKU"
+        "description": "Azure Managed Redis SKU - B5 recommended for OSS Cluster testing (multiple primary shards)"
       }
     },
     "redisClusterPolicy": {
@@ -50,6 +54,13 @@
       ],
       "metadata": {
         "description": "Redis cluster policy: OSSCluster (for cluster-aware clients) or EnterpriseCluster (single endpoint proxy)"
+      }
+    },
+    "redisHighAvailability": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Enable High Availability (replica nodes) - strongly recommended for production"
       }
     },
     "vmAdminUsername": {
@@ -364,6 +375,9 @@
           "clusterPolicy": {
             "value": "[parameters('redisClusterPolicy')]"
           },
+          "highAvailability": {
+            "value": "[parameters('redisHighAvailability')]"
+          },
           "subnetId": {
             "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'vnet'), '2025-04-01').outputs.redisSubnetId.value]"
           },
@@ -377,7 +391,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.39.26.7824",
-              "templateHash": "882242642430390651"
+              "templateHash": "905997381441199058"
             }
           },
           "parameters": {
@@ -402,6 +416,9 @@
             "sku": {
               "type": "string",
               "allowedValues": [
+                "Balanced_B0",
+                "Balanced_B1",
+                "Balanced_B3",
                 "Balanced_B5",
                 "Balanced_B10",
                 "Balanced_B20",
@@ -442,6 +459,13 @@
               "metadata": {
                 "description": "Client ID of the managed identity (for alias)"
               }
+            },
+            "highAvailability": {
+              "type": "bool",
+              "defaultValue": true,
+              "metadata": {
+                "description": "Enable High Availability (replica nodes)"
+              }
             }
           },
           "resources": [
@@ -455,7 +479,8 @@
                 "name": "[parameters('sku')]"
               },
               "properties": {
-                "minimumTlsVersion": "1.2"
+                "minimumTlsVersion": "1.2",
+                "highAvailability": "[if(parameters('highAvailability'), 'Enabled', 'Disabled')]"
               }
             },
             {
@@ -476,7 +501,7 @@
             {
               "type": "Microsoft.Cache/redisEnterprise/databases/accessPolicyAssignments",
               "apiVersion": "2024-09-01-preview",
-              "name": "[format('{0}/{1}/{2}', parameters('name'), 'default', 'managed-identity-access')]",
+              "name": "[format('{0}/{1}/{2}', parameters('name'), 'default', 'user-assigned-mi-access')]",
               "properties": {
                 "accessPolicyName": "default",
                 "user": {
@@ -623,7 +648,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.39.26.7824",
-              "templateHash": "10426274018558003434"
+              "templateHash": "15710315163608083725"
             }
           },
           "parameters": {
@@ -720,7 +745,7 @@
               "location": "[parameters('location')]",
               "tags": "[parameters('tags')]",
               "identity": {
-                "type": "UserAssigned",
+                "type": "SystemAssigned, UserAssigned",
                 "userAssignedIdentities": {
                   "[format('{0}', parameters('managedIdentityId'))]": {}
                 }
@@ -794,6 +819,10 @@
             "publicIpAddress": {
               "type": "string",
               "value": "[reference(resourceId('Microsoft.Network/publicIPAddresses', format('{0}-pip', parameters('name'))), '2023-05-01').ipAddress]"
+            },
+            "systemAssignedPrincipalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Compute/virtualMachines', parameters('name')), '2023-07-01', 'full').identity.principalId]"
             }
           }
         }
@@ -802,6 +831,91 @@
         "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'managed-identity')]",
         "[subscriptionResourceId('Microsoft.Resources/resourceGroups', format('rg-{0}', parameters('environmentName')))]",
         "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'vnet')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "vm-system-identity-access-policy",
+      "resourceGroup": "[format('rg-{0}', parameters('environmentName'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "redisClusterName": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'redis'), '2025-04-01').outputs.name.value]"
+          },
+          "principalId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'vm'), '2025-04-01').outputs.systemAssignedPrincipalId.value]"
+          },
+          "accessPolicyAssignmentName": {
+            "value": "vm-system-identity-access"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.39.26.7824",
+              "templateHash": "5946712031734284253"
+            }
+          },
+          "parameters": {
+            "redisClusterName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Redis Enterprise cluster"
+              }
+            },
+            "principalId": {
+              "type": "string",
+              "metadata": {
+                "description": "Principal ID to grant access"
+              }
+            },
+            "accessPolicyAssignmentName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name for this access policy assignment"
+              }
+            },
+            "accessPolicyName": {
+              "type": "string",
+              "defaultValue": "default",
+              "metadata": {
+                "description": "Access policy name to assign (default, data-owner, data-reader, etc.)"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Cache/redisEnterprise/databases/accessPolicyAssignments",
+              "apiVersion": "2024-09-01-preview",
+              "name": "[format('{0}/{1}/{2}', parameters('redisClusterName'), 'default', parameters('accessPolicyAssignmentName'))]",
+              "properties": {
+                "accessPolicyName": "[parameters('accessPolicyName')]",
+                "user": {
+                  "objectId": "[parameters('principalId')]"
+                }
+              }
+            }
+          ],
+          "outputs": {
+            "accessPolicyId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Cache/redisEnterprise/databases/accessPolicyAssignments', parameters('redisClusterName'), 'default', parameters('accessPolicyAssignmentName'))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'redis')]",
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', format('rg-{0}', parameters('environmentName')))]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'vm')]"
       ]
     }
   ],
@@ -833,6 +947,10 @@
     "AZURE_MANAGED_IDENTITY_PRINCIPAL_ID": {
       "type": "string",
       "value": "[if(variables('useExistingIdentity'), parameters('existingManagedIdentityPrincipalId'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'managed-identity'), '2025-04-01').outputs.principalId.value)]"
+    },
+    "VM_SYSTEM_ASSIGNED_PRINCIPAL_ID": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'vm'), '2025-04-01').outputs.systemAssignedPrincipalId.value]"
     },
     "VM_NAME": {
       "type": "string",
