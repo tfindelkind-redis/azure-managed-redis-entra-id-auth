@@ -438,7 +438,7 @@ run_java_user_mi() {
         export REDIS_PORT='$REDIS_PORT' && \
         export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
         mvn compile -q && \
-        mvn exec:java -Dexec.mainClass='com.example.UserAssignedManagedIdentityExample' -q 2>&1"
+        mvn exec:java -Dexec.mainClass='com.example.UserAssignedManagedIdentityExample' -Dio.netty.transport.noNative=true -q 2>&1"
 }
 
 # Run Java Lettuce example - System-Assigned Managed Identity
@@ -454,7 +454,7 @@ run_java_system_mi() {
         export REDIS_PORT='$REDIS_PORT' && \
         export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
         mvn compile -q && \
-        mvn exec:java -Dexec.mainClass='com.example.SystemAssignedManagedIdentityExample' -q 2>&1"
+        mvn exec:java -Dexec.mainClass='com.example.SystemAssignedManagedIdentityExample' -Dio.netty.transport.noNative=true -q 2>&1"
 }
 
 # Run Java Lettuce example - Service Principal
@@ -473,7 +473,7 @@ run_java_sp() {
         export REDIS_PORT='$REDIS_PORT' && \
         export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
         mvn compile -q && \
-        mvn exec:java -Dexec.mainClass='com.example.ServicePrincipalExample' -q 2>&1"
+        mvn exec:java -Dexec.mainClass='com.example.ServicePrincipalExample' -Dio.netty.transport.noNative=true -q 2>&1"
 }
 
 # Run all Java Lettuce examples
@@ -705,7 +705,7 @@ run_springboot_user_mi() {
         export REDIS_PORT='$REDIS_PORT' && \
         export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
         mvn compile -q 2>/dev/null && \
-        mvn spring-boot:run -Dspring-boot.run.profiles=user-mi -q 2>&1 || mvn spring-boot:run -Dspring-boot.run.profiles=user-mi 2>&1 | head -100"
+        mvn spring-boot:run -Dspring-boot.run.profiles=user-mi -Dspring-boot.run.jvmArguments='-Dio.netty.transport.noNative=true' -q 2>&1 || mvn spring-boot:run -Dspring-boot.run.profiles=user-mi -Dspring-boot.run.jvmArguments='-Dio.netty.transport.noNative=true' 2>&1 | head -100"
 }
 
 # Run Spring Boot example - System-Assigned Managed Identity
@@ -721,7 +721,7 @@ run_springboot_system_mi() {
         export REDIS_PORT='$REDIS_PORT' && \
         export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
         mvn compile -q 2>/dev/null && \
-        mvn spring-boot:run -Dspring-boot.run.profiles=system-mi -q 2>&1 || mvn spring-boot:run -Dspring-boot.run.profiles=system-mi 2>&1 | head -100"
+        mvn spring-boot:run -Dspring-boot.run.profiles=system-mi -Dspring-boot.run.jvmArguments='-Dio.netty.transport.noNative=true' -q 2>&1 || mvn spring-boot:run -Dspring-boot.run.profiles=system-mi -Dspring-boot.run.jvmArguments='-Dio.netty.transport.noNative=true' 2>&1 | head -100"
 }
 
 # Run Spring Boot example - Service Principal
@@ -740,7 +740,7 @@ run_springboot_sp() {
         export REDIS_PORT='$REDIS_PORT' && \
         export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
         mvn compile -q 2>/dev/null && \
-        mvn spring-boot:run -Dspring-boot.run.profiles=service-principal -q 2>&1 || mvn spring-boot:run -Dspring-boot.run.profiles=service-principal 2>&1 | head -100"
+        mvn spring-boot:run -Dspring-boot.run.profiles=service-principal -Dspring-boot.run.jvmArguments='-Dio.netty.transport.noNative=true' -q 2>&1 || mvn spring-boot:run -Dspring-boot.run.profiles=service-principal -Dspring-boot.run.jvmArguments='-Dio.netty.transport.noNative=true' 2>&1 | head -100"
 }
 
 # Run all Spring Boot examples

@@ -10,6 +10,7 @@ import io.lettuce.core.resource.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import redis.clients.authentication.entraid.EntraIDTokenAuthConfigBuilder;
@@ -228,13 +229,8 @@ public class RedisConfig {
      * Creates standard RedisClient (for Enterprise Cluster policy).
      */
     @Bean(destroyMethod = "shutdown")
+    @ConditionalOnProperty(name = "azure.redis.cluster-policy", havingValue = "EnterpriseCluster", matchIfMissing = true)
     public RedisClient redisClient(ClientResources clientResources, ClientOptions clientOptions, RedisURI redisURI) {
-        boolean isOSSCluster = "OSSCluster".equalsIgnoreCase(clusterPolicy);
-        if (isOSSCluster) {
-            log.info("Skipping standard RedisClient (using cluster client for OSS policy)");
-            return null;
-        }
-
         log.info("Creating RedisClient for Enterprise Cluster policy");
         RedisClient client = RedisClient.create(clientResources, redisURI);
         client.setOptions(clientOptions);
@@ -245,17 +241,12 @@ public class RedisConfig {
      * Creates RedisClusterClient (for OSS Cluster policy).
      */
     @Bean(destroyMethod = "shutdown")
+    @ConditionalOnProperty(name = "azure.redis.cluster-policy", havingValue = "OSSCluster")
     public RedisClusterClient redisClusterClient(
             ClientResources clientResources, 
             ClusterClientOptions clusterClientOptions, 
             RedisURI redisURI) {
         
-        boolean isOSSCluster = "OSSCluster".equalsIgnoreCase(clusterPolicy);
-        if (!isOSSCluster) {
-            log.info("Skipping RedisClusterClient (using standard client for Enterprise policy)");
-            return null;
-        }
-
         log.info("Creating RedisClusterClient for OSS Cluster policy");
         RedisClusterClient client = RedisClusterClient.create(clientResources, redisURI);
         client.setOptions(clusterClientOptions);
@@ -266,11 +257,8 @@ public class RedisConfig {
      * Creates standard connection (for Enterprise Cluster policy).
      */
     @Bean(destroyMethod = "close")
+    @ConditionalOnProperty(name = "azure.redis.cluster-policy", havingValue = "EnterpriseCluster", matchIfMissing = true)
     public StatefulRedisConnection<String, String> redisConnection(RedisClient redisClient) {
-        if (redisClient == null) {
-            return null;
-        }
-
         log.info("Establishing standard Redis connection...");
         StatefulRedisConnection<String, String> connection = redisClient.connect();
         
@@ -285,11 +273,8 @@ public class RedisConfig {
      * Creates cluster connection (for OSS Cluster policy).
      */
     @Bean(destroyMethod = "close")
+    @ConditionalOnProperty(name = "azure.redis.cluster-policy", havingValue = "OSSCluster")
     public StatefulRedisClusterConnection<String, String> redisClusterConnection(RedisClusterClient redisClusterClient) {
-        if (redisClusterClient == null) {
-            return null;
-        }
-
         log.info("Establishing cluster Redis connection...");
         StatefulRedisClusterConnection<String, String> connection = redisClusterClient.connect();
         

@@ -130,29 +130,63 @@ async function runWithOSSCluster() {
   console.log('2. Creating Redis Cluster client with address mapping...');
   const client = createCluster({
     rootNodes: [{
-      url: `rediss://${config.redisHost}:${config.redisPort}`
+      socket: {
+        host: config.redisHost,
+        port: config.redisPort,
+        tls: true,
+        servername: config.redisHost,
+        connectTimeout: 30000,
+        reconnectStrategy: false
+      }
     }],
-    credentialsProvider: provider,
+    // IMPORTANT: credentialsProvider must be inside defaults for cluster client
     defaults: {
+      credentialsProvider: provider,
       socket: {
         tls: true,
-        servername: config.redisHost
+        servername: config.redisHost,
+        connectTimeout: 30000
       }
     },
     // Map all cluster node addresses back to the public hostname
+    // nodeAddressMap receives an address string like "10.0.0.1:6379"
     nodeAddressMap: (address) => {
+      // address is a string in format "host:port"
+      const colonIndex = address.lastIndexOf(':');
+      const originalHost = address.substring(0, colonIndex);
+      const port = parseInt(address.substring(colonIndex + 1), 10);
+      
+      console.log(`   🔄 Mapping ${originalHost}:${port} -> ${config.redisHost}:${port}`);
       return {
         host: config.redisHost,
-        port: address.port
+        port: port
       };
     }
   });
+
+  // Add error handler for debugging
+  client.on('error', (err) => {
+    console.error('   ❌ Cluster client error:', err.message);
+  });
+
   console.log(`   ✅ Cluster client configured for ${config.redisHost}:${config.redisPort}\n`);
 
-  // Connect
+  // Connect with timeout
   console.log('3. Connecting to Redis Cluster...');
-  await client.connect();
-  console.log('   ✅ Connected!\n');
+  const connectTimeout = setTimeout(() => {
+    console.error('   ⏱️ Connection timeout after 60 seconds');
+    process.exit(1);
+  }, 60000);
+
+  try {
+    await client.connect();
+    clearTimeout(connectTimeout);
+    console.log('   ✅ Connected!\n');
+  } catch (connectError) {
+    clearTimeout(connectTimeout);
+    console.error('   ❌ Connection failed:', connectError.message);
+    throw connectError;
+  }
 
   await runDemoOperations(client);
 
