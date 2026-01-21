@@ -93,10 +93,10 @@ TokenAuthConfig authConfig = EntraIDTokenAuthConfigBuilder.builder()
 Azure Managed Redis supports two cluster policies:
 
 ### EnterpriseCluster (Default)
-Standard Redis client works - server handles slot routing internally. Uses `ManagedIdentityExample.java`.
+Standard Redis client works - server handles slot routing internally.
 
 ### OSSCluster
-Requires cluster-aware client using `JedisCluster` with address remapping. The key challenge is that Azure returns internal IPs in CLUSTER SLOTS responses that are unreachable from outside Azure. We handle this with a `HostAndPortMapper`:
+Requires cluster-aware client using `JedisCluster` with address remapping. All examples automatically detect this via `REDIS_CLUSTER_POLICY` environment variable. The key challenge is that Azure returns internal IPs in CLUSTER SLOTS responses that are unreachable from outside Azure. We handle this with a `HostAndPortMapper`:
 
 ```java
 // Create address mapper that remaps internal Azure IPs to public hostname
@@ -126,7 +126,7 @@ try (JedisCluster jedis = new JedisCluster(
 }
 ```
 
-See `ClusterManagedIdentityExample.java` for the full implementation.
+See any example file for the full implementation - all support both cluster policies.
 
 ## 📁 Project Structure
 
@@ -134,14 +134,15 @@ See `ClusterManagedIdentityExample.java` for the full implementation.
 java-jedis/
 ├── README.md
 ├── pom.xml
+├── dependencies.json
 └── src/
     └── main/
         └── java/
             └── com/
                 └── example/
-                    ├── ManagedIdentityExample.java         # Enterprise policy
-                    ├── ClusterManagedIdentityExample.java  # OSS Cluster policy
-                    └── ServicePrincipalExample.java        # Service principal auth
+                    ├── UserAssignedManagedIdentityExample.java   # User-Assigned MI
+                    ├── SystemAssignedManagedIdentityExample.java # System-Assigned MI
+                    └── ServicePrincipalExample.java              # Service Principal auth
 ```
 
 ## 🔧 Building and Running
@@ -150,15 +151,25 @@ java-jedis/
 # Build
 mvn clean package
 
-# Run Managed Identity Example (from Azure)
-java -cp target/jedis-entra-example-1.0.jar com.example.ManagedIdentityExample
+# Run User-Assigned Managed Identity Example
+export AZURE_CLIENT_ID="your-managed-identity-client-id"
+export REDIS_HOSTNAME="your-redis.region.redis.azure.net"
+mvn exec:java -Dexec.mainClass="com.example.UserAssignedManagedIdentityExample"
 
-# Run Service Principal Example
+# Run System-Assigned Managed Identity Example (on Azure VM/Container Apps)
+export REDIS_HOSTNAME="your-redis.region.redis.azure.net"
+mvn exec:java -Dexec.mainClass="com.example.SystemAssignedManagedIdentityExample"
+
+# Run Service Principal Example (local development)
 export AZURE_CLIENT_ID="your-client-id"
 export AZURE_CLIENT_SECRET="your-secret"
 export AZURE_TENANT_ID="your-tenant-id"
 export REDIS_HOSTNAME="your-redis.region.redis.azure.net"
-java -cp target/jedis-entra-example-1.0.jar com.example.ServicePrincipalExample
+mvn exec:java -Dexec.mainClass="com.example.ServicePrincipalExample"
+
+# With OSS Cluster policy
+export REDIS_CLUSTER_POLICY="OSSCluster"
+mvn exec:java -Dexec.mainClass="com.example.UserAssignedManagedIdentityExample"
 ```
 
 ## 🔧 Configuration
@@ -166,10 +177,13 @@ java -cp target/jedis-entra-example-1.0.jar com.example.ServicePrincipalExample
 ### Environment Variables
 
 ```bash
-# For Managed Identity
-export AZURE_CLIENT_ID="your-managed-identity-client-id"
+# Required for all
 export REDIS_HOSTNAME="your-redis.region.redis.azure.net"
-export REDIS_PORT="10000"
+export REDIS_PORT="10000"  # Optional, defaults to 10000
+export REDIS_CLUSTER_POLICY="EnterpriseCluster"  # or "OSSCluster"
+
+# For User-Assigned Managed Identity
+export AZURE_CLIENT_ID="your-managed-identity-client-id"
 
 # For Service Principal
 export AZURE_CLIENT_ID="your-sp-client-id"

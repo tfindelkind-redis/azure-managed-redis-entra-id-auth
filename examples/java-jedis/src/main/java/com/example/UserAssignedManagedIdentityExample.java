@@ -2,6 +2,7 @@ package com.example;
 
 import redis.clients.authentication.entraid.EntraIDTokenAuthConfigBuilder;
 import redis.clients.authentication.core.TokenAuthConfig;
+import redis.clients.authentication.entraid.ManagedIdentityInfo.UserManagedIdentityType;
 import redis.clients.jedis.*;
 import redis.clients.jedis.authentication.AuthXManager;
 import redis.clients.jedis.exceptions.JedisException;
@@ -11,20 +12,15 @@ import java.time.format.DateTimeFormatter;
 import java.util.Set;
 
 /**
- * Azure Managed Redis - Service Principal Authentication (Jedis)
+ * Azure Managed Redis - User-Assigned Managed Identity Authentication (Jedis)
  * 
  * This example demonstrates how to connect to Azure Managed Redis using
- * a Service Principal with Entra ID authentication.
+ * a User-Assigned Managed Identity with Entra ID authentication.
  * 
  * CLUSTER POLICY SUPPORT:
  * - Enterprise Cluster: ✅ Fully supported (server handles slot routing)
  * - OSS Cluster: ⚠️ Limited - Jedis with Entra ID doesn't fully support cluster mode
  *   Use Lettuce for OSS Cluster with Entra ID authentication
- * 
- * This is useful for:
- * - Local development
- * - CI/CD pipelines
- * - Non-Azure environments
  * 
  * Requirements:
  * - Java 17+
@@ -32,40 +28,38 @@ import java.util.Set;
  * - redis-authx-entraid 0.1.1-beta2
  * 
  * Environment Variables:
- * - AZURE_CLIENT_ID: Application (client) ID of the service principal
- * - AZURE_CLIENT_SECRET: Client secret of the service principal
- * - AZURE_TENANT_ID: Directory (tenant) ID
+ * - AZURE_CLIENT_ID: Client ID of the user-assigned managed identity (REQUIRED)
  * - REDIS_HOSTNAME: Hostname of your Azure Managed Redis instance
  * - REDIS_PORT: Port (default: 10000)
  * - REDIS_CLUSTER_POLICY: "EnterpriseCluster" or "OSSCluster" (default: EnterpriseCluster)
+ * 
+ * This code should be run from an Azure resource (App Service, VM, etc.)
+ * that has the managed identity assigned.
  */
-public class ServicePrincipalExample {
+public class UserAssignedManagedIdentityExample {
     
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final String REDIS_SCOPE = "https://redis.azure.com";
 
     public static void main(String[] args) {
         String clientId = System.getenv("AZURE_CLIENT_ID");
-        String clientSecret = System.getenv("AZURE_CLIENT_SECRET");
-        String tenantId = System.getenv("AZURE_TENANT_ID");
         String redisHost = System.getenv("REDIS_HOSTNAME");
         int redisPort = Integer.parseInt(System.getenv().getOrDefault("REDIS_PORT", "10000"));
         String clusterPolicy = System.getenv().getOrDefault("REDIS_CLUSTER_POLICY", "EnterpriseCluster");
 
-        StringBuilder missing = new StringBuilder();
-        if (clientId == null || clientId.isEmpty()) missing.append("AZURE_CLIENT_ID ");
-        if (clientSecret == null || clientSecret.isEmpty()) missing.append("AZURE_CLIENT_SECRET ");
-        if (tenantId == null || tenantId.isEmpty()) missing.append("AZURE_TENANT_ID ");
-        if (redisHost == null || redisHost.isEmpty()) missing.append("REDIS_HOSTNAME ");
-        
-        if (missing.length() > 0) {
-            System.err.println("Error: Missing required environment variables: " + missing.toString().trim());
+        if (clientId == null || clientId.isEmpty()) {
+            System.err.println("Error: AZURE_CLIENT_ID environment variable is required");
+            System.exit(1);
+        }
+        if (redisHost == null || redisHost.isEmpty()) {
+            System.err.println("Error: REDIS_HOSTNAME environment variable is required");
             System.exit(1);
         }
 
         boolean isOSSCluster = "OSSCluster".equalsIgnoreCase(clusterPolicy);
 
         System.out.println("\n" + "=".repeat(70));
-        System.out.println("AZURE MANAGED REDIS - SERVICE PRINCIPAL (JEDIS)");
+        System.out.println("AZURE MANAGED REDIS - USER-ASSIGNED MI (JEDIS)");
         System.out.println("Cluster Policy: " + clusterPolicy + (isOSSCluster ? " (limited support)" : " (full support)"));
         System.out.println("=".repeat(70) + "\n");
 
@@ -76,13 +70,9 @@ public class ServicePrincipalExample {
 
         try {
             System.out.println("1. Creating authentication configuration...");
-            String authority = "https://login.microsoftonline.com/" + tenantId;
-            
             TokenAuthConfig authConfig = EntraIDTokenAuthConfigBuilder.builder()
-                .clientId(clientId)
-                .secret(clientSecret)
-                .authority(authority)
-                .scopes(Set.of("https://redis.azure.com/.default"))
+                .userAssignedManagedIdentity(UserManagedIdentityType.CLIENT_ID, clientId)
+                .scopes(Set.of(REDIS_SCOPE))
                 .build();
             System.out.println("   ✅ Auth config created for: " + clientId.substring(0, 8) + "...\n");
 
@@ -122,8 +112,8 @@ public class ServicePrincipalExample {
         System.out.println("   ✅ PING response: " + pong + "\n");
 
         System.out.println("5. Testing SET operation...");
-        String testKey = "jedis-sp-test:" + LocalDateTime.now().format(FORMATTER);
-        String testValue = "Hello from Jedis with Service Principal!";
+        String testKey = "jedis-usermi-test:" + LocalDateTime.now().format(FORMATTER);
+        String testValue = "Hello from Jedis with User-Assigned MI!";
         jedis.setex(testKey, 60, testValue);
         System.out.println("   ✅ SET '" + testKey + "' = '" + testValue + "'\n");
 
@@ -132,7 +122,7 @@ public class ServicePrincipalExample {
         System.out.println("   ✅ GET '" + testKey + "' = '" + retrieved + "'\n");
 
         System.out.println("7. Testing INCR operation...");
-        String counterKey = "jedis-sp-counter";
+        String counterKey = "jedis-usermi-counter";
         long newValue = jedis.incr(counterKey);
         System.out.println("   ✅ INCR '" + counterKey + "' = " + newValue + "\n");
 

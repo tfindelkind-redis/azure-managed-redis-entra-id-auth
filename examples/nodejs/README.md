@@ -86,21 +86,23 @@ const provider = EntraIdCredentialsProviderFactory.createForDefaultAzureCredenti
 nodejs/
 ├── README.md
 ├── package.json
-├── managed_identity_example.mjs           # Enterprise policy
-├── cluster_managed_identity_example.mjs   # OSS Cluster policy
-├── service_principal_example.mjs          # Service principal auth
-└── default_credential_example.mjs         # DefaultAzureCredential
+├── dependencies.json
+├── user_assigned_managed_identity_example.mjs    # User-Assigned MI
+├── system_assigned_managed_identity_example.mjs  # System-Assigned MI
+└── service_principal_example.mjs                 # Service Principal auth
 ```
+
+All examples support both cluster policies via the `REDIS_CLUSTER_POLICY` environment variable.
 
 ## 🔧 Cluster Policy Support
 
 Azure Managed Redis supports two cluster policies:
 
 ### EnterpriseCluster (Default)
-Uses `createClient()` - server handles slot routing. See `managed_identity_example.mjs`.
+Uses `createClient()` - server handles slot routing.
 
 ### OSSCluster
-Uses `createCluster()` with `nodeAddressMap` for address remapping. The key challenge is that Azure returns internal IPs in CLUSTER SLOTS responses that are unreachable from outside Azure:
+Uses `createCluster()` with `nodeAddressMap` for address remapping. All examples automatically detect this via `REDIS_CLUSTER_POLICY` environment variable. The key challenge is that Azure returns internal IPs in CLUSTER SLOTS responses that are unreachable from outside Azure:
 
 ```javascript
 import { createCluster } from 'redis';
@@ -132,7 +134,7 @@ const client = createCluster({
 });
 ```
 
-See `cluster_managed_identity_example.mjs` for the full implementation.
+See any example file for the full implementation - all support both cluster policies.
 
 ## 🔧 Running Examples
 
@@ -140,17 +142,25 @@ See `cluster_managed_identity_example.mjs` for the full implementation.
 # Install dependencies
 npm install
 
-# Run with managed identity (from Azure)
+# Run User-Assigned Managed Identity example
 export AZURE_CLIENT_ID="your-managed-identity-client-id"
 export REDIS_HOSTNAME="your-redis.region.redis.azure.net"
-node managed_identity_example.mjs
+node user_assigned_managed_identity_example.mjs
 
-# Run with service principal (local development)
+# Run System-Assigned Managed Identity example (on Azure VM/Container Apps)
+export REDIS_HOSTNAME="your-redis.region.redis.azure.net"
+node system_assigned_managed_identity_example.mjs
+
+# Run Service Principal example (local development)
 export AZURE_CLIENT_ID="your-client-id"
 export AZURE_CLIENT_SECRET="your-secret"
 export AZURE_TENANT_ID="your-tenant-id"
 export REDIS_HOSTNAME="your-redis.region.redis.azure.net"
 node service_principal_example.mjs
+
+# With OSS Cluster policy
+export REDIS_CLUSTER_POLICY="OSSCluster"
+node user_assigned_managed_identity_example.mjs
 ```
 
 ## 🔧 Configuration
@@ -161,8 +171,9 @@ node service_principal_example.mjs
 # Required for all
 export REDIS_HOSTNAME="your-redis.region.redis.azure.net"
 export REDIS_PORT="10000"  # Optional, defaults to 10000
+export REDIS_CLUSTER_POLICY="EnterpriseCluster"  # or "OSSCluster"
 
-# For Managed Identity
+# For User-Assigned Managed Identity
 export AZURE_CLIENT_ID="your-managed-identity-client-id"
 
 # For Service Principal

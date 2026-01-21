@@ -1,8 +1,15 @@
 /*
- * Azure Managed Redis - Managed Identity Authentication Example (.NET)
+ * Azure Managed Redis - User-Assigned Managed Identity Authentication (.NET)
  * 
  * This example demonstrates how to connect to Azure Managed Redis using
  * a User-Assigned Managed Identity with Entra ID authentication.
+ * 
+ * CLUSTER POLICY SUPPORT:
+ * - Enterprise Cluster: ✅ Fully supported (server handles slot routing)
+ * - OSS Cluster: ✅ Fully supported (StackExchange.Redis handles cluster automatically)
+ * 
+ * Note: StackExchange.Redis automatically handles cluster topology discovery
+ * and slot routing for both Enterprise and OSS Cluster policies.
  * 
  * Requirements:
  * - .NET 8.0+
@@ -13,6 +20,7 @@
  * - AZURE_CLIENT_ID: Client ID of the user-assigned managed identity
  * - REDIS_HOSTNAME: Hostname of your Azure Managed Redis instance
  * - REDIS_PORT: Port (default: 10000)
+ * - REDIS_CLUSTER_POLICY: "EnterpriseCluster" or "OSSCluster" (default: EnterpriseCluster)
  * 
  * This code should be run from an Azure resource that has the
  * managed identity assigned.
@@ -23,7 +31,7 @@ using Microsoft.Azure.StackExchangeRedis;
 
 namespace EntraIdAuth;
 
-public class ManagedIdentityExample
+public class UserAssignedManagedIdentityExample
 {
     public static async Task RunAsync()
     {
@@ -31,6 +39,7 @@ public class ManagedIdentityExample
         var clientId = Environment.GetEnvironmentVariable("AZURE_CLIENT_ID");
         var redisHostname = Environment.GetEnvironmentVariable("REDIS_HOSTNAME");
         var redisPort = Environment.GetEnvironmentVariable("REDIS_PORT") ?? "10000";
+        var clusterPolicy = Environment.GetEnvironmentVariable("REDIS_CLUSTER_POLICY") ?? "EnterpriseCluster";
 
         // Validate configuration
         if (string.IsNullOrEmpty(clientId))
@@ -44,10 +53,13 @@ public class ManagedIdentityExample
             Environment.Exit(1);
         }
 
+        var isOSSCluster = clusterPolicy.Equals("OSSCluster", StringComparison.OrdinalIgnoreCase);
+
         Console.WriteLine();
-        Console.WriteLine("============================================================");
-        Console.WriteLine("AZURE MANAGED REDIS - .NET MANAGED IDENTITY AUTH DEMO");
-        Console.WriteLine("============================================================");
+        Console.WriteLine("======================================================================");
+        Console.WriteLine("AZURE MANAGED REDIS - USER-ASSIGNED MANAGED IDENTITY (.NET)");
+        Console.WriteLine($"Cluster Policy: {clusterPolicy}" + (isOSSCluster ? " (cluster-aware)" : " (standard)"));
+        Console.WriteLine("======================================================================");
         Console.WriteLine();
 
         // Create configuration options with Entra ID authentication
@@ -82,8 +94,8 @@ public class ManagedIdentityExample
 
         // Test SET
         Console.WriteLine("4. Testing SET operation...");
-        var testKey = $"dotnet-entra-test:{DateTime.Now:o}";
-        var testValue = "Hello from .NET with Entra ID auth!";
+        var testKey = $"dotnet-usermi-test:{DateTime.Now:o}";
+        var testValue = "Hello from .NET with User-Assigned Managed Identity!";
         await db.StringSetAsync(testKey, testValue, TimeSpan.FromSeconds(60));
         Console.WriteLine($"   ✅ SET '{testKey}'");
         Console.WriteLine();
@@ -96,14 +108,14 @@ public class ManagedIdentityExample
 
         // Test INCR
         Console.WriteLine("6. Testing INCR operation...");
-        var counterKey = "dotnet-counter";
+        var counterKey = "dotnet-usermi-counter";
         var newValue = await db.StringIncrementAsync(counterKey);
         Console.WriteLine($"   ✅ INCR '{counterKey}' = {newValue}");
         Console.WriteLine();
 
         // Test Hash operations
         Console.WriteLine("7. Testing Hash operations...");
-        var hashKey = "dotnet-hash";
+        var hashKey = "dotnet-usermi-hash";
         await db.HashSetAsync(hashKey, new HashEntry[] {
             new("field1", "value1"),
             new("field2", "value2")
@@ -127,8 +139,8 @@ public class ManagedIdentityExample
         Console.WriteLine("   ✅ Deleted test keys");
         Console.WriteLine();
 
-        Console.WriteLine("============================================================");
+        Console.WriteLine("======================================================================");
         Console.WriteLine("DEMO COMPLETE - All operations successful!");
-        Console.WriteLine("============================================================");
+        Console.WriteLine("======================================================================");
     }
 }

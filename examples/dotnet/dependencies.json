@@ -1,0 +1,21 @@
+{
+  "language": ".NET",
+  "runtime": "net8.0",
+  "packageManager": "NuGet",
+  "manifestFile": "EntraIdAuth.csproj",
+  "dependencies": [
+    {
+      "name": "StackExchange.Redis",
+      "version": "2.10.1",
+      "purpose": "Redis client library for .NET",
+      "repository": "https://www.nuget.org/packages/StackExchange.Redis"
+    },
+    {
+      "name": "Microsoft.Azure.StackExchangeRedis",
+      "version": "3.3.1",
+      "purpose": "Azure Entra ID authentication extension for StackExchange.Redis",
+      "repository": "https://www.nuget.org/packages/Microsoft.Azure.StackExchangeRedis"
+    }
+  ],
+  "lastUpdated": "2026-01-20"
+}

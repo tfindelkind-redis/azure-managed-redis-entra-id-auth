@@ -5,7 +5,7 @@ This directory contains Python examples for authenticating to Azure Managed Redi
 ## 📦 Required Packages
 
 ```bash
-pip install redis>=5.0.0 redis-entraid>=1.1.0
+pip install redis>=7.1.0 redis-entraid>=1.1.0
 ```
 
 Or use the requirements file:
@@ -109,21 +109,25 @@ client = Redis(
 
 ## 📁 Example Files
 
-| File | Description | Cluster Policy |
+| File | Description | Authentication |
 |------|-------------|----------------|
-| `managed_identity_example.py` | Managed identity auth (Enterprise policy) | Enterprise |
-| `cluster_managed_identity_example.py` | Cluster-aware managed identity auth | OSS Cluster |
-| `service_principal_example.py` | Service principal auth (Enterprise policy) | Enterprise |
+| `user_assigned_managed_identity_example.py` | User-Assigned Managed Identity | Azure resources with user-assigned MI |
+| `system_assigned_managed_identity_example.py` | System-Assigned Managed Identity | Azure resources with system-assigned MI |
+| `service_principal_example.py` | Service Principal (client credentials) | Local dev, CI/CD, non-Azure environments |
+
+All examples support both cluster policies via the `REDIS_CLUSTER_POLICY` environment variable:
+- `EnterpriseCluster` (default) - Server handles slot routing
+- `OSSCluster` - Client-side cluster-aware with address remapping
 
 ## 🔧 Cluster Policy Support
 
 Azure Managed Redis supports two cluster policies:
 
 ### EnterpriseCluster (Default)
-Uses standard `Redis` client - server handles slot routing. See `managed_identity_example.py`.
+Uses standard `Redis` client - server handles slot routing. See `user_assigned_managed_identity_example.py`.
 
 ### OSSCluster  
-Uses `RedisCluster` client with address remapping. The key challenge is that Azure returns internal IPs in CLUSTER SLOTS responses that are unreachable from outside Azure. We handle this with the `address_remap` parameter:
+Uses `RedisCluster` client with address remapping. All examples automatically detect this via `REDIS_CLUSTER_POLICY` environment variable. The key challenge is that Azure returns internal IPs in CLUSTER SLOTS responses that are unreachable from outside Azure. We handle this with the `address_remap` parameter:
 
 ```python
 from redis.cluster import RedisCluster, ClusterNode
@@ -151,7 +155,7 @@ client = RedisCluster(
 )
 ```
 
-See `cluster_managed_identity_example.py` for the full implementation.
+See any example file for the full implementation - all support both cluster policies.
 
 ## 🔧 Configuration
 
@@ -161,6 +165,7 @@ See `cluster_managed_identity_example.py` for the full implementation.
 # Required for all
 export REDIS_HOSTNAME="your-redis.region.redis.azure.net"
 export REDIS_PORT="10000"  # Optional, defaults to 10000
+export REDIS_CLUSTER_POLICY="EnterpriseCluster"  # or "OSSCluster"
 
 # For User-Assigned Managed Identity
 export AZURE_CLIENT_ID="your-managed-identity-client-id"
@@ -169,6 +174,33 @@ export AZURE_CLIENT_ID="your-managed-identity-client-id"
 export AZURE_CLIENT_ID="your-service-principal-client-id"
 export AZURE_CLIENT_SECRET="your-client-secret"
 export AZURE_TENANT_ID="your-tenant-id"
+```
+
+## 🚀 Running Examples
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Run User-Assigned Managed Identity example
+export AZURE_CLIENT_ID="your-managed-identity-client-id"
+export REDIS_HOSTNAME="your-redis.region.redis.azure.net"
+python user_assigned_managed_identity_example.py
+
+# Run System-Assigned Managed Identity example (on Azure VM/Container Apps)
+export REDIS_HOSTNAME="your-redis.region.redis.azure.net"
+python system_assigned_managed_identity_example.py
+
+# Run Service Principal example (local development)
+export AZURE_CLIENT_ID="your-sp-client-id"
+export AZURE_CLIENT_SECRET="your-sp-secret"
+export AZURE_TENANT_ID="your-tenant-id"
+export REDIS_HOSTNAME="your-redis.region.redis.azure.net"
+python service_principal_example.py
+
+# With OSS Cluster policy
+export REDIS_CLUSTER_POLICY="OSSCluster"
+python user_assigned_managed_identity_example.py
 ```
 
 ## 🧪 Testing Locally

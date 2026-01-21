@@ -1,7 +1,18 @@
-# Azure Managed Redis - Spring Boot Lettuce Cluster Configuration
+# Azure Managed Redis - Spring Boot Configuration
 # 
-# This configuration is designed for Azure Managed Redis (Cluster OSS tier)
-# with Entra ID authentication using User-Assigned Managed Identity.
+# CLUSTER POLICY SUPPORT:
+# - EnterpriseCluster: Uses standard RedisClient (server handles slot routing)
+# - OSSCluster: Uses RedisClusterClient with address remapping for SSL/SNI
+#
+# AUTHENTICATION METHODS (via Spring profiles):
+# - user-mi: User-Assigned Managed Identity
+# - system-mi: System-Assigned Managed Identity  
+# - service-principal: Service Principal (Client Credentials)
+#
+# Run examples:
+#   mvn spring-boot:run -Dspring-boot.run.profiles=user-mi
+#   mvn spring-boot:run -Dspring-boot.run.profiles=system-mi
+#   mvn spring-boot:run -Dspring-boot.run.profiles=service-principal
 
 azure:
   redis:
@@ -9,18 +20,15 @@ azure:
     hostname: ${REDIS_HOSTNAME:}
     # Port - typically 10000 for Azure Managed Redis
     port: ${REDIS_PORT:10000}
+    # Cluster policy: "EnterpriseCluster" or "OSSCluster"
+    cluster-policy: ${REDIS_CLUSTER_POLICY:EnterpriseCluster}
     # Always use SSL for Azure Managed Redis
     ssl: true
-    
-  identity:
-    # Client ID of the User-Assigned Managed Identity
-    # This identity must have an access policy assigned in Azure Managed Redis
-    client-id: ${AZURE_CLIENT_ID:}
 
 # Spring configuration
 spring:
   application:
-    name: lettuce-springboot-cluster-entra
+    name: lettuce-springboot-entra
   
   # Disable Spring's auto-configuration for Redis
   # We're using our custom configuration with Entra ID auth
@@ -29,7 +37,6 @@ spring:
       - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
       - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
   
-  # Enable scheduling for token validation
   main:
     allow-bean-definition-overriding: true
 
@@ -38,21 +45,49 @@ logging:
   level:
     root: INFO
     com.example: DEBUG
-    # Enable detailed Lettuce logging for debugging
     io.lettuce.core: INFO
-    # Enable token/auth debugging
     redis.clients.authentication: DEBUG
     com.azure.identity: INFO
     
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    console: "%d{HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
 
-# Actuator endpoints (optional, useful for monitoring)
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info
-  endpoint:
-    health:
-      show-details: always
+---
+# Profile: User-Assigned Managed Identity
+spring:
+  config:
+    activate:
+      on-profile: user-mi
+
+azure:
+  auth:
+    type: user-assigned-managed-identity
+  identity:
+    # Client ID of the User-Assigned Managed Identity
+    client-id: ${AZURE_CLIENT_ID:}
+
+---
+# Profile: System-Assigned Managed Identity
+spring:
+  config:
+    activate:
+      on-profile: system-mi
+
+azure:
+  auth:
+    type: system-assigned-managed-identity
+
+---
+# Profile: Service Principal
+spring:
+  config:
+    activate:
+      on-profile: service-principal
+
+azure:
+  auth:
+    type: service-principal
+  service-principal:
+    client-id: ${AZURE_CLIENT_ID:}
+    client-secret: ${AZURE_CLIENT_SECRET:}
+    tenant-id: ${AZURE_TENANT_ID:}

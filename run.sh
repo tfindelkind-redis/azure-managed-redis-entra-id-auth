@@ -3,14 +3,23 @@
 # Azure Managed Redis Entra ID Auth - Test Runner
 # =============================================================================
 # Usage:
-#   ./run.sh <language> [--cluster]
+#   ./run.sh <language> [auth-type]
 #
 # Examples:
-#   ./run.sh python           # Run Python example (Enterprise policy)
-#   ./run.sh java             # Run Java Lettuce example
-#   ./run.sh java --cluster   # Run Java Lettuce Cluster example (OSS Cluster policy)
-#   ./run.sh all              # Run all examples
-#   ./run.sh status           # Show current deployment status
+#   ./run.sh python                    # Run all Python auth examples
+#   ./run.sh python user-mi            # Run Python user-assigned MI example
+#   ./run.sh python system-mi          # Run Python system-assigned MI example
+#   ./run.sh python sp                 # Run Python service principal example
+#   ./run.sh java                      # Run all Java Lettuce auth examples
+#   ./run.sh springboot                # Run Spring Boot with all profiles
+#   ./run.sh all                       # Run all examples for all languages
+#   ./run.sh status                    # Show current deployment status
+#
+# Auth Types:
+#   user-mi     User-Assigned Managed Identity (runs on Azure VM)
+#   system-mi   System-Assigned Managed Identity (runs on Azure VM)
+#   sp          Service Principal (can run locally or on VM)
+#   all         All three authentication types (default)
 #
 # Prerequisites:
 #   - Run 'azd up' first to deploy infrastructure
@@ -144,7 +153,7 @@ setup_vm() {
     
     # Create directories on VM
     # Note: ~/go is GOPATH default, so use ~/go-example for Go code
-    run_on_vm "mkdir -p ~/python ~/nodejs ~/dotnet ~/java-lettuce ~/java-jedis ~/go-example"
+    run_on_vm "mkdir -p ~/python ~/nodejs ~/dotnet ~/java-lettuce ~/java-jedis ~/go-example ~/java-springboot"
     
     # Copy example files
     echo "   Copying Python example..."
@@ -171,24 +180,19 @@ setup_vm() {
     sshpass -p "$VM_ADMIN_PASSWORD" scp -o StrictHostKeyChecking=no -r "$SCRIPT_DIR/examples/go/"* "azureuser@$VM_PUBLIC_IP:~/go-example/" 2>/dev/null || \
         scp -o StrictHostKeyChecking=no -r "$SCRIPT_DIR/examples/go/"* "azureuser@$VM_PUBLIC_IP:~/go-example/"
     
+    echo "   Copying Spring Boot example..."
+    sshpass -p "$VM_ADMIN_PASSWORD" scp -o StrictHostKeyChecking=no -r "$SCRIPT_DIR/examples/java-lettuce-springboot/"* "azureuser@$VM_PUBLIC_IP:~/java-springboot/" 2>/dev/null || \
+        scp -o StrictHostKeyChecking=no -r "$SCRIPT_DIR/examples/java-lettuce-springboot/"* "azureuser@$VM_PUBLIC_IP:~/java-springboot/"
+    
     echo -e "${GREEN}✅ Examples copied to VM${NC}"
 }
 
-# Run Python example (auto-detects cluster policy)
-run_python() {
-    local cluster_mode="${1:-auto}"
-    local example_file="managed_identity_example.py"
-    local policy_suffix=""
-    
-    # Determine which example to run
-    if [ "$cluster_mode" = "cluster" ] || ([ "$cluster_mode" = "auto" ] && [ "$REDIS_CLUSTER_POLICY" = "OSSCluster" ]); then
-        example_file="cluster_managed_identity_example.py"
-        policy_suffix=" (OSS Cluster)"
-    fi
-    
+# Run Python example - User-Assigned Managed Identity
+run_python_user_mi() {
     echo ""
     echo -e "${BLUE}==========================================${NC}"
-    echo -e "${BLUE}  Running Python Example${policy_suffix}${NC}"
+    echo -e "${BLUE}  Python - User-Assigned Managed Identity${NC}"
+    echo -e "${BLUE}  Cluster Policy: ${CYAN}$REDIS_CLUSTER_POLICY${NC}"
     echo -e "${BLUE}==========================================${NC}"
     
     run_on_vm "cd ~/python && \
@@ -199,24 +203,80 @@ run_python() {
         export REDIS_HOSTNAME='$REDIS_HOSTNAME' && \
         export REDIS_PORT='$REDIS_PORT' && \
         export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
-        python $example_file"
+        python user_assigned_managed_identity_example.py"
 }
 
-# Run Node.js example (auto-detects cluster policy)
-run_nodejs() {
-    local cluster_mode="${1:-auto}"
-    local example_file="managed_identity_example.mjs"
-    local policy_suffix=""
-    
-    # Determine which example to run
-    if [ "$cluster_mode" = "cluster" ] || ([ "$cluster_mode" = "auto" ] && [ "$REDIS_CLUSTER_POLICY" = "OSSCluster" ]); then
-        example_file="cluster_managed_identity_example.mjs"
-        policy_suffix=" (OSS Cluster)"
-    fi
-    
+# Run Python example - System-Assigned Managed Identity
+run_python_system_mi() {
     echo ""
     echo -e "${BLUE}==========================================${NC}"
-    echo -e "${BLUE}  Running Node.js Example${policy_suffix}${NC}"
+    echo -e "${BLUE}  Python - System-Assigned Managed Identity${NC}"
+    echo -e "${BLUE}  Cluster Policy: ${CYAN}$REDIS_CLUSTER_POLICY${NC}"
+    echo -e "${BLUE}==========================================${NC}"
+    
+    run_on_vm "cd ~/python && \
+        python3 -m venv .venv 2>/dev/null || true && \
+        source .venv/bin/activate && \
+        pip install -q -r requirements.txt && \
+        export REDIS_HOSTNAME='$REDIS_HOSTNAME' && \
+        export REDIS_PORT='$REDIS_PORT' && \
+        export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
+        python system_assigned_managed_identity_example.py"
+}
+
+# Run Python example - Service Principal
+run_python_sp() {
+    echo ""
+    echo -e "${BLUE}==========================================${NC}"
+    echo -e "${BLUE}  Python - Service Principal${NC}"
+    echo -e "${BLUE}  Cluster Policy: ${CYAN}$REDIS_CLUSTER_POLICY${NC}"
+    echo -e "${BLUE}==========================================${NC}"
+    
+    run_on_vm "cd ~/python && \
+        python3 -m venv .venv 2>/dev/null || true && \
+        source .venv/bin/activate && \
+        pip install -q -r requirements.txt && \
+        export AZURE_CLIENT_ID='$SERVICE_PRINCIPAL_CLIENT_ID' && \
+        export AZURE_CLIENT_SECRET='$SERVICE_PRINCIPAL_CLIENT_SECRET' && \
+        export AZURE_TENANT_ID='$SERVICE_PRINCIPAL_TENANT_ID' && \
+        export REDIS_HOSTNAME='$REDIS_HOSTNAME' && \
+        export REDIS_PORT='$REDIS_PORT' && \
+        export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
+        python service_principal_example.py"
+}
+
+# Run all Python examples
+run_python() {
+    local auth_type="${1:-all}"
+    
+    case "$auth_type" in
+        user-mi|user)
+            run_python_user_mi
+            ;;
+        system-mi|system)
+            run_python_system_mi
+            ;;
+        sp|service-principal)
+            run_python_sp
+            ;;
+        all|"")
+            run_python_user_mi
+            run_python_system_mi
+            run_python_sp
+            ;;
+        *)
+            echo -e "${RED}Unknown auth type: $auth_type${NC}"
+            return 1
+            ;;
+    esac
+}
+
+# Run Node.js example - User-Assigned Managed Identity
+run_nodejs_user_mi() {
+    echo ""
+    echo -e "${BLUE}==========================================${NC}"
+    echo -e "${BLUE}  Node.js - User-Assigned Managed Identity${NC}"
+    echo -e "${BLUE}  Cluster Policy: ${CYAN}$REDIS_CLUSTER_POLICY${NC}"
     echo -e "${BLUE}==========================================${NC}"
     
     run_on_vm "cd ~/nodejs && \
@@ -225,24 +285,76 @@ run_nodejs() {
         export REDIS_HOSTNAME='$REDIS_HOSTNAME' && \
         export REDIS_PORT='$REDIS_PORT' && \
         export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
-        node $example_file"
+        node user_assigned_managed_identity_example.mjs"
 }
 
-# Run .NET example (auto-detects cluster policy)
-run_dotnet() {
-    local cluster_mode="${1:-auto}"
-    local cluster_flag=""
-    local policy_suffix=""
-    
-    # Determine which example to run
-    if [ "$cluster_mode" = "cluster" ] || ([ "$cluster_mode" = "auto" ] && [ "$REDIS_CLUSTER_POLICY" = "OSSCluster" ]); then
-        cluster_flag="--cluster"
-        policy_suffix=" (OSS Cluster)"
-    fi
-    
+# Run Node.js example - System-Assigned Managed Identity
+run_nodejs_system_mi() {
     echo ""
     echo -e "${BLUE}==========================================${NC}"
-    echo -e "${BLUE}  Running .NET Example${policy_suffix}${NC}"
+    echo -e "${BLUE}  Node.js - System-Assigned Managed Identity${NC}"
+    echo -e "${BLUE}  Cluster Policy: ${CYAN}$REDIS_CLUSTER_POLICY${NC}"
+    echo -e "${BLUE}==========================================${NC}"
+    
+    run_on_vm "cd ~/nodejs && \
+        npm install --silent 2>/dev/null && \
+        export REDIS_HOSTNAME='$REDIS_HOSTNAME' && \
+        export REDIS_PORT='$REDIS_PORT' && \
+        export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
+        node system_assigned_managed_identity_example.mjs"
+}
+
+# Run Node.js example - Service Principal
+run_nodejs_sp() {
+    echo ""
+    echo -e "${BLUE}==========================================${NC}"
+    echo -e "${BLUE}  Node.js - Service Principal${NC}"
+    echo -e "${BLUE}  Cluster Policy: ${CYAN}$REDIS_CLUSTER_POLICY${NC}"
+    echo -e "${BLUE}==========================================${NC}"
+    
+    run_on_vm "cd ~/nodejs && \
+        npm install --silent 2>/dev/null && \
+        export AZURE_CLIENT_ID='$SERVICE_PRINCIPAL_CLIENT_ID' && \
+        export AZURE_CLIENT_SECRET='$SERVICE_PRINCIPAL_CLIENT_SECRET' && \
+        export AZURE_TENANT_ID='$SERVICE_PRINCIPAL_TENANT_ID' && \
+        export REDIS_HOSTNAME='$REDIS_HOSTNAME' && \
+        export REDIS_PORT='$REDIS_PORT' && \
+        export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
+        node service_principal_example.mjs"
+}
+
+# Run all Node.js examples
+run_nodejs() {
+    local auth_type="${1:-all}"
+    
+    case "$auth_type" in
+        user-mi|user)
+            run_nodejs_user_mi
+            ;;
+        system-mi|system)
+            run_nodejs_system_mi
+            ;;
+        sp|service-principal)
+            run_nodejs_sp
+            ;;
+        all|"")
+            run_nodejs_user_mi
+            run_nodejs_system_mi
+            run_nodejs_sp
+            ;;
+        *)
+            echo -e "${RED}Unknown auth type: $auth_type${NC}"
+            return 1
+            ;;
+    esac
+}
+
+# Run .NET example - User-Assigned Managed Identity
+run_dotnet_user_mi() {
+    echo ""
+    echo -e "${BLUE}==========================================${NC}"
+    echo -e "${BLUE}  .NET - User-Assigned Managed Identity${NC}"
+    echo -e "${BLUE}  Cluster Policy: ${CYAN}$REDIS_CLUSTER_POLICY${NC}"
     echo -e "${BLUE}==========================================${NC}"
     
     run_on_vm "cd ~/dotnet && \
@@ -250,23 +362,74 @@ run_dotnet() {
         export REDIS_HOSTNAME='$REDIS_HOSTNAME' && \
         export REDIS_PORT='$REDIS_PORT' && \
         export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
-        dotnet run -- --ManagedIdentity $cluster_flag 2>&1"
+        dotnet run -- --user-mi 2>&1"
 }
 
-# Run Java Lettuce example (auto-detects cluster policy)
-run_java() {
-    local cluster_mode="${1:-auto}"
-    local main_class="com.example.UserAssignedManagedIdentityExample"
-    local policy_suffix=""
-    
-    # All examples support both cluster policies now
-    if [ "$cluster_mode" = "cluster" ] || ([ "$cluster_mode" = "auto" ] && [ "$REDIS_CLUSTER_POLICY" = "OSSCluster" ]); then
-        policy_suffix=" (OSS Cluster)"
-    fi
-    
+# Run .NET example - System-Assigned Managed Identity
+run_dotnet_system_mi() {
     echo ""
     echo -e "${BLUE}==========================================${NC}"
-    echo -e "${BLUE}  Running Java Lettuce Example${policy_suffix}${NC}"
+    echo -e "${BLUE}  .NET - System-Assigned Managed Identity${NC}"
+    echo -e "${BLUE}  Cluster Policy: ${CYAN}$REDIS_CLUSTER_POLICY${NC}"
+    echo -e "${BLUE}==========================================${NC}"
+    
+    run_on_vm "cd ~/dotnet && \
+        export REDIS_HOSTNAME='$REDIS_HOSTNAME' && \
+        export REDIS_PORT='$REDIS_PORT' && \
+        export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
+        dotnet run -- --system-mi 2>&1"
+}
+
+# Run .NET example - Service Principal
+run_dotnet_sp() {
+    echo ""
+    echo -e "${BLUE}==========================================${NC}"
+    echo -e "${BLUE}  .NET - Service Principal${NC}"
+    echo -e "${BLUE}  Cluster Policy: ${CYAN}$REDIS_CLUSTER_POLICY${NC}"
+    echo -e "${BLUE}==========================================${NC}"
+    
+    run_on_vm "cd ~/dotnet && \
+        export AZURE_CLIENT_ID='$SERVICE_PRINCIPAL_CLIENT_ID' && \
+        export AZURE_CLIENT_SECRET='$SERVICE_PRINCIPAL_CLIENT_SECRET' && \
+        export AZURE_TENANT_ID='$SERVICE_PRINCIPAL_TENANT_ID' && \
+        export REDIS_HOSTNAME='$REDIS_HOSTNAME' && \
+        export REDIS_PORT='$REDIS_PORT' && \
+        export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
+        dotnet run -- -sp 2>&1"
+}
+
+# Run all .NET examples
+run_dotnet() {
+    local auth_type="${1:-all}"
+    
+    case "$auth_type" in
+        user-mi|user)
+            run_dotnet_user_mi
+            ;;
+        system-mi|system)
+            run_dotnet_system_mi
+            ;;
+        sp|service-principal)
+            run_dotnet_sp
+            ;;
+        all|"")
+            run_dotnet_user_mi
+            run_dotnet_system_mi
+            run_dotnet_sp
+            ;;
+        *)
+            echo -e "${RED}Unknown auth type: $auth_type${NC}"
+            return 1
+            ;;
+    esac
+}
+
+# Run Java Lettuce example - User-Assigned Managed Identity
+run_java_user_mi() {
+    echo ""
+    echo -e "${BLUE}==========================================${NC}"
+    echo -e "${BLUE}  Java Lettuce - User-Assigned Managed Identity${NC}"
+    echo -e "${BLUE}  Cluster Policy: ${CYAN}$REDIS_CLUSTER_POLICY${NC}"
     echo -e "${BLUE}==========================================${NC}"
     
     run_on_vm "cd ~/java-lettuce && \
@@ -275,28 +438,88 @@ run_java() {
         export REDIS_PORT='$REDIS_PORT' && \
         export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
         mvn compile -q && \
-        mvn exec:java -Dexec.mainClass='$main_class' -q 2>&1"
+        mvn exec:java -Dexec.mainClass='com.example.UserAssignedManagedIdentityExample' -q 2>&1"
+}
+
+# Run Java Lettuce example - System-Assigned Managed Identity
+run_java_system_mi() {
+    echo ""
+    echo -e "${BLUE}==========================================${NC}"
+    echo -e "${BLUE}  Java Lettuce - System-Assigned Managed Identity${NC}"
+    echo -e "${BLUE}  Cluster Policy: ${CYAN}$REDIS_CLUSTER_POLICY${NC}"
+    echo -e "${BLUE}==========================================${NC}"
+    
+    run_on_vm "cd ~/java-lettuce && \
+        export REDIS_HOSTNAME='$REDIS_HOSTNAME' && \
+        export REDIS_PORT='$REDIS_PORT' && \
+        export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
+        mvn compile -q && \
+        mvn exec:java -Dexec.mainClass='com.example.SystemAssignedManagedIdentityExample' -q 2>&1"
+}
+
+# Run Java Lettuce example - Service Principal
+run_java_sp() {
+    echo ""
+    echo -e "${BLUE}==========================================${NC}"
+    echo -e "${BLUE}  Java Lettuce - Service Principal${NC}"
+    echo -e "${BLUE}  Cluster Policy: ${CYAN}$REDIS_CLUSTER_POLICY${NC}"
+    echo -e "${BLUE}==========================================${NC}"
+    
+    run_on_vm "cd ~/java-lettuce && \
+        export AZURE_CLIENT_ID='$SERVICE_PRINCIPAL_CLIENT_ID' && \
+        export AZURE_CLIENT_SECRET='$SERVICE_PRINCIPAL_CLIENT_SECRET' && \
+        export AZURE_TENANT_ID='$SERVICE_PRINCIPAL_TENANT_ID' && \
+        export REDIS_HOSTNAME='$REDIS_HOSTNAME' && \
+        export REDIS_PORT='$REDIS_PORT' && \
+        export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
+        mvn compile -q && \
+        mvn exec:java -Dexec.mainClass='com.example.ServicePrincipalExample' -q 2>&1"
+}
+
+# Run all Java Lettuce examples
+run_java() {
+    local auth_type="${1:-all}"
+    
+    case "$auth_type" in
+        user-mi|user)
+            run_java_user_mi
+            ;;
+        system-mi|system)
+            run_java_system_mi
+            ;;
+        sp|service-principal)
+            run_java_sp
+            ;;
+        cluster)
+            # Backwards compatibility - run user-mi with cluster
+            run_java_user_mi
+            ;;
+        all|"")
+            run_java_user_mi
+            run_java_system_mi
+            run_java_sp
+            ;;
+        *)
+            echo -e "${RED}Unknown auth type: $auth_type${NC}"
+            return 1
+            ;;
+    esac
 }
 
 # Run Java Lettuce Cluster example (explicit OSS Cluster - for backwards compatibility)
 run_java_cluster() {
-    run_java "cluster"
+    run_java "user-mi"
 }
 
-# Run Java Jedis example (auto-detects cluster policy)
-run_jedis() {
-    local cluster_mode="${1:-auto}"
-    local main_class="com.example.ManagedIdentityExample"
-    local policy_suffix=""
-    
-    # All examples support both cluster policies now
-    if [ "$cluster_mode" = "cluster" ] || ([ "$cluster_mode" = "auto" ] && [ "$REDIS_CLUSTER_POLICY" = "OSSCluster" ]); then
-        policy_suffix=" (OSS Cluster)"
-    fi
-    
+# Run Java Jedis example - User-Assigned Managed Identity
+run_jedis_user_mi() {
     echo ""
     echo -e "${BLUE}==========================================${NC}"
-    echo -e "${BLUE}  Running Java Jedis Example${policy_suffix}${NC}"
+    echo -e "${BLUE}  Java Jedis - User-Assigned Managed Identity${NC}"
+    echo -e "${BLUE}  Cluster Policy: ${CYAN}$REDIS_CLUSTER_POLICY${NC}"
+    if [ "$REDIS_CLUSTER_POLICY" = "OSSCluster" ]; then
+        echo -e "${YELLOW}  ⚠️  Note: Jedis has limited OSS Cluster support${NC}"
+    fi
     echo -e "${BLUE}==========================================${NC}"
     
     run_on_vm "cd ~/java-jedis && \
@@ -305,24 +528,82 @@ run_jedis() {
         export REDIS_PORT='$REDIS_PORT' && \
         export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
         mvn compile -q && \
-        mvn exec:java -Dexec.mainClass='$main_class' -q 2>&1"
+        mvn exec:java -Dexec.mainClass='com.example.UserAssignedManagedIdentityExample' -q 2>&1"
 }
 
-# Run Go example (auto-detects cluster policy)
-run_go() {
-    local cluster_mode="${1:-auto}"
-    local example_file="managed_identity_example.go"
-    local policy_suffix=""
-    
-    # Determine which example to run
-    if [ "$cluster_mode" = "cluster" ] || ([ "$cluster_mode" = "auto" ] && [ "$REDIS_CLUSTER_POLICY" = "OSSCluster" ]); then
-        example_file="cluster_managed_identity_example.go"
-        policy_suffix=" (OSS Cluster)"
-    fi
-    
+# Run Java Jedis example - System-Assigned Managed Identity
+run_jedis_system_mi() {
     echo ""
     echo -e "${BLUE}==========================================${NC}"
-    echo -e "${BLUE}  Running Go Example${policy_suffix}${NC}"
+    echo -e "${BLUE}  Java Jedis - System-Assigned Managed Identity${NC}"
+    echo -e "${BLUE}  Cluster Policy: ${CYAN}$REDIS_CLUSTER_POLICY${NC}"
+    if [ "$REDIS_CLUSTER_POLICY" = "OSSCluster" ]; then
+        echo -e "${YELLOW}  ⚠️  Note: Jedis has limited OSS Cluster support${NC}"
+    fi
+    echo -e "${BLUE}==========================================${NC}"
+    
+    run_on_vm "cd ~/java-jedis && \
+        export REDIS_HOSTNAME='$REDIS_HOSTNAME' && \
+        export REDIS_PORT='$REDIS_PORT' && \
+        export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
+        mvn compile -q && \
+        mvn exec:java -Dexec.mainClass='com.example.SystemAssignedManagedIdentityExample' -q 2>&1"
+}
+
+# Run Java Jedis example - Service Principal
+run_jedis_sp() {
+    echo ""
+    echo -e "${BLUE}==========================================${NC}"
+    echo -e "${BLUE}  Java Jedis - Service Principal${NC}"
+    echo -e "${BLUE}  Cluster Policy: ${CYAN}$REDIS_CLUSTER_POLICY${NC}"
+    if [ "$REDIS_CLUSTER_POLICY" = "OSSCluster" ]; then
+        echo -e "${YELLOW}  ⚠️  Note: Jedis has limited OSS Cluster support${NC}"
+    fi
+    echo -e "${BLUE}==========================================${NC}"
+    
+    run_on_vm "cd ~/java-jedis && \
+        export AZURE_CLIENT_ID='$SERVICE_PRINCIPAL_CLIENT_ID' && \
+        export AZURE_CLIENT_SECRET='$SERVICE_PRINCIPAL_CLIENT_SECRET' && \
+        export AZURE_TENANT_ID='$SERVICE_PRINCIPAL_TENANT_ID' && \
+        export REDIS_HOSTNAME='$REDIS_HOSTNAME' && \
+        export REDIS_PORT='$REDIS_PORT' && \
+        export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
+        mvn compile -q && \
+        mvn exec:java -Dexec.mainClass='com.example.ServicePrincipalExample' -q 2>&1"
+}
+
+# Run all Java Jedis examples
+run_jedis() {
+    local auth_type="${1:-all}"
+    
+    case "$auth_type" in
+        user-mi|user)
+            run_jedis_user_mi
+            ;;
+        system-mi|system)
+            run_jedis_system_mi
+            ;;
+        sp|service-principal)
+            run_jedis_sp
+            ;;
+        all|"")
+            run_jedis_user_mi
+            run_jedis_system_mi
+            run_jedis_sp
+            ;;
+        *)
+            echo -e "${RED}Unknown auth type: $auth_type${NC}"
+            return 1
+            ;;
+    esac
+}
+
+# Run Go example - User-Assigned Managed Identity
+run_go_user_mi() {
+    echo ""
+    echo -e "${BLUE}==========================================${NC}"
+    echo -e "${BLUE}  Go - User-Assigned Managed Identity${NC}"
+    echo -e "${BLUE}  Cluster Policy: ${CYAN}$REDIS_CLUSTER_POLICY${NC}"
     echo -e "${BLUE}==========================================${NC}"
     
     run_on_vm "cd ~/go-example && \
@@ -336,7 +617,156 @@ run_go() {
         export GOCACHE=\$HOME/gocache && \
         mkdir -p \$GOPATH \$GOCACHE && \
         go mod tidy && \
-        go run $example_file 2>&1"
+        go run user_assigned_managed_identity_example.go 2>&1"
+}
+
+# Run Go example - System-Assigned Managed Identity
+run_go_system_mi() {
+    echo ""
+    echo -e "${BLUE}==========================================${NC}"
+    echo -e "${BLUE}  Go - System-Assigned Managed Identity${NC}"
+    echo -e "${BLUE}  Cluster Policy: ${CYAN}$REDIS_CLUSTER_POLICY${NC}"
+    echo -e "${BLUE}==========================================${NC}"
+    
+    run_on_vm "cd ~/go-example && \
+        export REDIS_HOSTNAME='$REDIS_HOSTNAME' && \
+        export REDIS_PORT='$REDIS_PORT' && \
+        export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
+        export PATH=\$PATH:/usr/local/go/bin && \
+        export GO111MODULE=on && \
+        export GOPATH=\$HOME/gopath && \
+        export GOCACHE=\$HOME/gocache && \
+        mkdir -p \$GOPATH \$GOCACHE && \
+        go mod tidy && \
+        go run system_assigned_managed_identity_example.go 2>&1"
+}
+
+# Run Go example - Service Principal
+run_go_sp() {
+    echo ""
+    echo -e "${BLUE}==========================================${NC}"
+    echo -e "${BLUE}  Go - Service Principal${NC}"
+    echo -e "${BLUE}  Cluster Policy: ${CYAN}$REDIS_CLUSTER_POLICY${NC}"
+    echo -e "${BLUE}==========================================${NC}"
+    
+    run_on_vm "cd ~/go-example && \
+        export AZURE_CLIENT_ID='$SERVICE_PRINCIPAL_CLIENT_ID' && \
+        export AZURE_CLIENT_SECRET='$SERVICE_PRINCIPAL_CLIENT_SECRET' && \
+        export AZURE_TENANT_ID='$SERVICE_PRINCIPAL_TENANT_ID' && \
+        export REDIS_HOSTNAME='$REDIS_HOSTNAME' && \
+        export REDIS_PORT='$REDIS_PORT' && \
+        export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
+        export PATH=\$PATH:/usr/local/go/bin && \
+        export GO111MODULE=on && \
+        export GOPATH=\$HOME/gopath && \
+        export GOCACHE=\$HOME/gocache && \
+        mkdir -p \$GOPATH \$GOCACHE && \
+        go mod tidy && \
+        go run service_principal_example.go 2>&1"
+}
+
+# Run all Go examples
+run_go() {
+    local auth_type="${1:-all}"
+    
+    case "$auth_type" in
+        user-mi|user)
+            run_go_user_mi
+            ;;
+        system-mi|system)
+            run_go_system_mi
+            ;;
+        sp|service-principal)
+            run_go_sp
+            ;;
+        all|"")
+            run_go_user_mi
+            run_go_system_mi
+            run_go_sp
+            ;;
+        *)
+            echo -e "${RED}Unknown auth type: $auth_type${NC}"
+            return 1
+            ;;
+    esac
+}
+
+# Run Spring Boot example - User-Assigned Managed Identity
+run_springboot_user_mi() {
+    echo ""
+    echo -e "${BLUE}==========================================${NC}"
+    echo -e "${BLUE}  Spring Boot - User-Assigned Managed Identity${NC}"
+    echo -e "${BLUE}  Cluster Policy: ${CYAN}$REDIS_CLUSTER_POLICY${NC}"
+    echo -e "${BLUE}==========================================${NC}"
+    
+    run_on_vm "cd ~/java-springboot && \
+        export AZURE_CLIENT_ID='$AZURE_CLIENT_ID' && \
+        export REDIS_HOSTNAME='$REDIS_HOSTNAME' && \
+        export REDIS_PORT='$REDIS_PORT' && \
+        export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
+        mvn compile -q 2>/dev/null && \
+        mvn spring-boot:run -Dspring-boot.run.profiles=user-mi -q 2>&1 || mvn spring-boot:run -Dspring-boot.run.profiles=user-mi 2>&1 | head -100"
+}
+
+# Run Spring Boot example - System-Assigned Managed Identity
+run_springboot_system_mi() {
+    echo ""
+    echo -e "${BLUE}==========================================${NC}"
+    echo -e "${BLUE}  Spring Boot - System-Assigned Managed Identity${NC}"
+    echo -e "${BLUE}  Cluster Policy: ${CYAN}$REDIS_CLUSTER_POLICY${NC}"
+    echo -e "${BLUE}==========================================${NC}"
+    
+    run_on_vm "cd ~/java-springboot && \
+        export REDIS_HOSTNAME='$REDIS_HOSTNAME' && \
+        export REDIS_PORT='$REDIS_PORT' && \
+        export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
+        mvn compile -q 2>/dev/null && \
+        mvn spring-boot:run -Dspring-boot.run.profiles=system-mi -q 2>&1 || mvn spring-boot:run -Dspring-boot.run.profiles=system-mi 2>&1 | head -100"
+}
+
+# Run Spring Boot example - Service Principal
+run_springboot_sp() {
+    echo ""
+    echo -e "${BLUE}==========================================${NC}"
+    echo -e "${BLUE}  Spring Boot - Service Principal${NC}"
+    echo -e "${BLUE}  Cluster Policy: ${CYAN}$REDIS_CLUSTER_POLICY${NC}"
+    echo -e "${BLUE}==========================================${NC}"
+    
+    run_on_vm "cd ~/java-springboot && \
+        export AZURE_CLIENT_ID='$SERVICE_PRINCIPAL_CLIENT_ID' && \
+        export AZURE_CLIENT_SECRET='$SERVICE_PRINCIPAL_CLIENT_SECRET' && \
+        export AZURE_TENANT_ID='$SERVICE_PRINCIPAL_TENANT_ID' && \
+        export REDIS_HOSTNAME='$REDIS_HOSTNAME' && \
+        export REDIS_PORT='$REDIS_PORT' && \
+        export REDIS_CLUSTER_POLICY='$REDIS_CLUSTER_POLICY' && \
+        mvn compile -q 2>/dev/null && \
+        mvn spring-boot:run -Dspring-boot.run.profiles=service-principal -q 2>&1 || mvn spring-boot:run -Dspring-boot.run.profiles=service-principal 2>&1 | head -100"
+}
+
+# Run all Spring Boot examples
+run_springboot() {
+    local auth_type="${1:-all}"
+    
+    case "$auth_type" in
+        user-mi|user)
+            run_springboot_user_mi
+            ;;
+        system-mi|system)
+            run_springboot_system_mi
+            ;;
+        sp|service-principal)
+            run_springboot_sp
+            ;;
+        all|"")
+            run_springboot_user_mi
+            run_springboot_system_mi
+            run_springboot_sp
+            ;;
+        *)
+            echo -e "${RED}Unknown auth type: $auth_type${NC}"
+            return 1
+            ;;
+    esac
 }
 
 # Run all examples (auto-detects cluster policy)
@@ -418,11 +848,26 @@ run_all() {
         ((failed++))
     fi
     
+    # Spring Boot
+    if run_springboot; then
+        results+=("Spring Boot: ✅ PASSED")
+        ((passed++))
+    else
+        results+=("Spring Boot: ❌ FAILED")
+        ((failed++))
+    fi
+    
     # Summary
     echo ""
     echo -e "${BLUE}==========================================${NC}"
     echo -e "${BLUE}  Test Summary (${REDIS_CLUSTER_POLICY})${NC}"
     echo -e "${BLUE}==========================================${NC}"
+    echo ""
+    echo -e "${CYAN}Each language runs 3 auth methods:${NC}"
+    echo -e "  • User-Assigned Managed Identity"
+    echo -e "  • System-Assigned Managed Identity"
+    echo -e "  • Service Principal"
+    echo ""
     for result in "${results[@]}"; do
         echo "  $result"
     done
@@ -438,18 +883,32 @@ usage() {
     echo ""
     echo -e "${BLUE}Azure Managed Redis Entra ID Auth - Test Runner${NC}"
     echo ""
-    echo "Usage: $0 <command> [options]"
+    echo "Usage: $0 <command> [auth-type]"
     echo ""
     echo "Commands:"
     echo "  status          Show deployment status and connection info"
     echo "  setup           Copy example files to VM"
-    echo "  python          Run Python example (auto-detects cluster policy)"
-    echo "  nodejs          Run Node.js example (auto-detects cluster policy)"
-    echo "  dotnet          Run .NET example (auto-detects cluster policy)"
-    echo "  java            Run Java Lettuce example (auto-detects cluster policy)"
-    echo "  jedis           Run Java Jedis example (auto-detects cluster policy)"
-    echo "  go              Run Go example (auto-detects cluster policy)"
-    echo "  all             Run all examples (auto-detects cluster policy)"
+    echo "  python          Run Python examples"
+    echo "  nodejs          Run Node.js examples"
+    echo "  dotnet          Run .NET examples"
+    echo "  java            Run Java Lettuce examples"
+    echo "  jedis           Run Java Jedis examples"
+    echo "  go              Run Go examples"
+    echo "  springboot      Run Spring Boot examples"
+    echo "  all             Run all examples (all languages, all auth types)"
+    echo ""
+    echo "Auth Types (optional, default: all):"
+    echo "  user-mi         User-Assigned Managed Identity"
+    echo "  system-mi       System-Assigned Managed Identity"
+    echo "  sp              Service Principal"
+    echo "  all             All three authentication methods"
+    echo ""
+    echo "Examples:"
+    echo "  ./run.sh python                    # Run all Python auth examples"
+    echo "  ./run.sh python user-mi            # Run Python user-assigned MI only"
+    echo "  ./run.sh nodejs sp                 # Run Node.js service principal only"
+    echo "  ./run.sh springboot system-mi      # Run Spring Boot system-assigned MI"
+    echo "  ./run.sh all                       # Run everything"
     echo ""
     echo "Cluster Policy Auto-Detection:"
     echo "  All examples automatically detect the cluster policy from REDIS_CLUSTER_POLICY"
@@ -467,7 +926,7 @@ usage() {
     echo "  3. ./run.sh all                    # Run all tests"
     echo ""
     echo "To switch cluster policy:"
-    echo "  azd env set REDIS_CLUSTER_POLICY OSSCluster  # or 'Enterprise'"
+    echo "  azd env set REDIS_CLUSTER_POLICY OSSCluster  # or 'EnterpriseCluster'"
     echo "  azd up"
     echo "  ./run.sh setup && ./run.sh all"
     echo ""
@@ -490,36 +949,37 @@ main() {
         python)
             load_azd_env
             validate_env
-            run_python
+            run_python "$option"
             ;;
         nodejs|node)
             load_azd_env
             validate_env
-            run_nodejs
+            run_nodejs "$option"
             ;;
         dotnet|csharp)
             load_azd_env
             validate_env
-            run_dotnet
+            run_dotnet "$option"
             ;;
         java|lettuce)
             load_azd_env
             validate_env
-            if [ "$option" = "--cluster" ] || [ "$option" = "cluster" ]; then
-                run_java_cluster
-            else
-                run_java
-            fi
+            run_java "$option"
             ;;
         jedis)
             load_azd_env
             validate_env
-            run_jedis
+            run_jedis "$option"
             ;;
         go|golang)
             load_azd_env
             validate_env
-            run_go
+            run_go "$option"
+            ;;
+        springboot|spring)
+            load_azd_env
+            validate_env
+            run_springboot "$option"
             ;;
         all)
             load_azd_env

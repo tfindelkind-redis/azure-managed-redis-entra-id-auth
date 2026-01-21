@@ -7,27 +7,33 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.3.0</version>
+        <version>3.4.1</version>
         <relativePath/>
     </parent>
 
     <groupId>com.example</groupId>
-    <artifactId>lettuce-springboot-cluster-entra</artifactId>
+    <artifactId>lettuce-springboot-entra</artifactId>
     <version>1.0-SNAPSHOT</version>
     <packaging>jar</packaging>
 
-    <name>Spring Boot Lettuce Cluster - Entra ID Auth</name>
+    <name>Spring Boot Lettuce - Entra ID Auth</name>
     <description>
-        Spring Boot example with Lettuce connecting to Azure Managed Redis (Cluster OSS) 
-        using Entra ID authentication with User-Assigned Managed Identity.
-        Includes MappingSocketAddressResolver for proper cluster node resolution.
+        Spring Boot example with Lettuce connecting to Azure Managed Redis
+        using Entra ID authentication. Supports all three auth methods:
+        - User-Assigned Managed Identity (profile: user-mi)
+        - System-Assigned Managed Identity (profile: system-mi)
+        - Service Principal (profile: service-principal)
+        
+        Supports both cluster policies:
+        - EnterpriseCluster: Standard Redis client
+        - OSSCluster: Cluster client with MappingSocketAddressResolver
     </description>
 
     <properties>
         <java.version>17</java.version>
-        <lettuce.version>6.4.0.RELEASE</lettuce.version>
-        <redis-authx.version>0.1.1-beta1</redis-authx.version>
-        <azure-identity.version>1.14.2</azure-identity.version>
+        <lettuce.version>7.2.1.RELEASE</lettuce.version>
+        <redis-authx.version>0.1.1-beta2</redis-authx.version>
+        <azure-identity.version>1.15.0</azure-identity.version>
     </properties>
 
     <dependencies>
@@ -67,6 +73,13 @@
             <groupId>org.apache.httpcomponents.client5</groupId>
             <artifactId>httpclient5</artifactId>
             <version>5.3</version>
+        </dependency>
+
+        <!-- Netty native transport for Linux (epoll) -->
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-transport-native-epoll</artifactId>
+            <classifier>linux-x86_64</classifier>
         </dependency>
 
         <!-- Testing -->

@@ -1,8 +1,8 @@
 /*
- * Azure Managed Redis - Service Principal Authentication Example (.NET)
+ * Azure Managed Redis - System-Assigned Managed Identity Authentication (.NET)
  * 
  * This example demonstrates how to connect to Azure Managed Redis using
- * a Service Principal with Entra ID authentication.
+ * a System-Assigned Managed Identity with Entra ID authentication.
  * 
  * CLUSTER POLICY SUPPORT:
  * - Enterprise Cluster: ✅ Fully supported (server handles slot routing)
@@ -11,23 +11,21 @@
  * Note: StackExchange.Redis automatically handles cluster topology discovery
  * and slot routing for both Enterprise and OSS Cluster policies.
  * 
- * This is useful for:
- * - Local development
- * - CI/CD pipelines
- * - Non-Azure environments
- * 
  * Requirements:
  * - .NET 8.0+
  * - StackExchange.Redis 2.8.0+
  * - Microsoft.Azure.StackExchangeRedis 3.2.0+
  * 
  * Environment Variables:
- * - AZURE_CLIENT_ID: Application (client) ID of the service principal
- * - AZURE_CLIENT_SECRET: Client secret of the service principal
- * - AZURE_TENANT_ID: Directory (tenant) ID
  * - REDIS_HOSTNAME: Hostname of your Azure Managed Redis instance
  * - REDIS_PORT: Port (default: 10000)
  * - REDIS_CLUSTER_POLICY: "EnterpriseCluster" or "OSSCluster" (default: EnterpriseCluster)
+ * 
+ * Note: System-Assigned Managed Identity doesn't require AZURE_CLIENT_ID
+ * The identity is automatically associated with the Azure resource.
+ * 
+ * This code should be run from an Azure resource that has a
+ * system-assigned managed identity enabled.
  */
 
 using StackExchange.Redis;
@@ -35,34 +33,19 @@ using Microsoft.Azure.StackExchangeRedis;
 
 namespace EntraIdAuth;
 
-public class ServicePrincipalExample
+public class SystemAssignedManagedIdentityExample
 {
     public static async Task RunAsync()
     {
         // Load configuration
-        var clientId = Environment.GetEnvironmentVariable("AZURE_CLIENT_ID");
-        var clientSecret = Environment.GetEnvironmentVariable("AZURE_CLIENT_SECRET");
-        var tenantId = Environment.GetEnvironmentVariable("AZURE_TENANT_ID");
         var redisHostname = Environment.GetEnvironmentVariable("REDIS_HOSTNAME");
         var redisPort = Environment.GetEnvironmentVariable("REDIS_PORT") ?? "10000";
         var clusterPolicy = Environment.GetEnvironmentVariable("REDIS_CLUSTER_POLICY") ?? "EnterpriseCluster";
 
         // Validate configuration
-        var missing = new List<string>();
-        if (string.IsNullOrEmpty(clientId)) missing.Add("AZURE_CLIENT_ID");
-        if (string.IsNullOrEmpty(clientSecret)) missing.Add("AZURE_CLIENT_SECRET");
-        if (string.IsNullOrEmpty(tenantId)) missing.Add("AZURE_TENANT_ID");
-        if (string.IsNullOrEmpty(redisHostname)) missing.Add("REDIS_HOSTNAME");
-
-        if (missing.Count > 0)
+        if (string.IsNullOrEmpty(redisHostname))
         {
-            Console.WriteLine($"Error: Missing required environment variables: {string.Join(", ", missing)}");
-            Console.WriteLine();
-            Console.WriteLine("Please set:");
-            Console.WriteLine("  export AZURE_CLIENT_ID='your-client-id'");
-            Console.WriteLine("  export AZURE_CLIENT_SECRET='your-client-secret'");
-            Console.WriteLine("  export AZURE_TENANT_ID='your-tenant-id'");
-            Console.WriteLine("  export REDIS_HOSTNAME='your-redis.region.redis.azure.net'");
+            Console.WriteLine("Error: REDIS_HOSTNAME environment variable is required");
             Environment.Exit(1);
         }
 
@@ -70,17 +53,17 @@ public class ServicePrincipalExample
 
         Console.WriteLine();
         Console.WriteLine("======================================================================");
-        Console.WriteLine("AZURE MANAGED REDIS - SERVICE PRINCIPAL (.NET)");
+        Console.WriteLine("AZURE MANAGED REDIS - SYSTEM-ASSIGNED MANAGED IDENTITY (.NET)");
         Console.WriteLine($"Cluster Policy: {clusterPolicy}" + (isOSSCluster ? " (cluster-aware)" : " (standard)"));
         Console.WriteLine("======================================================================");
         Console.WriteLine();
 
-        // Create configuration options with Service Principal authentication
+        // Create configuration options with Entra ID authentication
         Console.WriteLine("1. Creating connection configuration...");
         var connectionString = $"{redisHostname}:{redisPort}";
         
         var configurationOptions = await ConfigurationOptions.Parse(connectionString)
-            .ConfigureForAzureWithServicePrincipalAsync(clientId!, tenantId!, clientSecret!);
+            .ConfigureForAzureWithSystemAssignedManagedIdentityAsync();
 
         // Configure additional options
         configurationOptions.Ssl = true;
@@ -88,7 +71,7 @@ public class ServicePrincipalExample
         configurationOptions.ConnectTimeout = 10000;
         configurationOptions.SyncTimeout = 10000;
         
-        Console.WriteLine($"   ✅ Configuration created for SP: {clientId![..8]}...");
+        Console.WriteLine("   ✅ Configuration created for System-Assigned MI");
         Console.WriteLine();
 
         // Connect to Redis
@@ -107,8 +90,8 @@ public class ServicePrincipalExample
 
         // Test SET
         Console.WriteLine("4. Testing SET operation...");
-        var testKey = $"dotnet-sp-test:{DateTime.Now:o}";
-        var testValue = "Hello from .NET with Service Principal auth!";
+        var testKey = $"dotnet-sysmi-test:{DateTime.Now:o}";
+        var testValue = "Hello from .NET with System-Assigned Managed Identity!";
         await db.StringSetAsync(testKey, testValue, TimeSpan.FromSeconds(60));
         Console.WriteLine($"   ✅ SET '{testKey}'");
         Console.WriteLine();
@@ -119,22 +102,22 @@ public class ServicePrincipalExample
         Console.WriteLine($"   ✅ GET '{testKey}' = '{retrieved}'");
         Console.WriteLine();
 
-        // Test List operations
-        Console.WriteLine("6. Testing List operations...");
-        var listKey = "dotnet-sp-list";
-        await db.ListRightPushAsync(listKey, new RedisValue[] { "item1", "item2", "item3" });
-        var listLength = await db.ListLengthAsync(listKey);
-        var firstItem = await db.ListGetByIndexAsync(listKey, 0);
-        Console.WriteLine($"   ✅ RPUSH/LLEN '{listKey}' length = {listLength}, first = '{firstItem}'");
+        // Test INCR
+        Console.WriteLine("6. Testing INCR operation...");
+        var counterKey = "dotnet-sysmi-counter";
+        var newValue = await db.StringIncrementAsync(counterKey);
+        Console.WriteLine($"   ✅ INCR '{counterKey}' = {newValue}");
         Console.WriteLine();
 
-        // Test Set operations
-        Console.WriteLine("7. Testing Set operations...");
-        var setKey = "dotnet-sp-set";
-        await db.SetAddAsync(setKey, new RedisValue[] { "member1", "member2", "member3" });
-        var setSize = await db.SetLengthAsync(setKey);
-        var isMember = await db.SetContainsAsync(setKey, "member1");
-        Console.WriteLine($"   ✅ SADD/SCARD '{setKey}' size = {setSize}, contains member1 = {isMember}");
+        // Test Hash operations
+        Console.WriteLine("7. Testing Hash operations...");
+        var hashKey = "dotnet-sysmi-hash";
+        await db.HashSetAsync(hashKey, new HashEntry[] {
+            new("field1", "value1"),
+            new("field2", "value2")
+        });
+        var hashValue = await db.HashGetAsync(hashKey, "field1");
+        Console.WriteLine($"   ✅ HSET/HGET '{hashKey}' field1 = '{hashValue}'");
         Console.WriteLine();
 
         // Get server info
@@ -147,8 +130,8 @@ public class ServicePrincipalExample
         // Cleanup - delete keys individually for OSS Cluster compatibility
         Console.WriteLine("9. Cleaning up test keys...");
         await db.KeyDeleteAsync(testKey);
-        await db.KeyDeleteAsync(listKey);
-        await db.KeyDeleteAsync(setKey);
+        await db.KeyDeleteAsync(hashKey);
+        await db.KeyDeleteAsync(counterKey);
         Console.WriteLine("   ✅ Deleted test keys");
         Console.WriteLine();
 

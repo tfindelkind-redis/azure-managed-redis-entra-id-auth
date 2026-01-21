@@ -58,18 +58,21 @@ var configurationOptions = await ConfigurationOptions.Parse($"{redisHostname}:10
 dotnet/
 ├── README.md
 ├── EntraIdAuth.csproj
-├── Program.cs                           # Entry point (detects --cluster flag)
-├── ManagedIdentityExample.cs            # Enterprise policy
-├── ClusterManagedIdentityExample.cs     # OSS Cluster policy
-└── ServicePrincipalExample.cs           # Service principal auth
+├── dependencies.json
+├── Program.cs                                  # Entry point (routes to examples)
+├── UserAssignedManagedIdentityExample.cs       # User-Assigned MI
+├── SystemAssignedManagedIdentityExample.cs     # System-Assigned MI
+└── ServicePrincipalExample.cs                  # Service Principal auth
 ```
+
+All examples support both cluster policies via the `REDIS_CLUSTER_POLICY` environment variable.
 
 ## 🔧 Cluster Policy Support
 
 Azure Managed Redis supports two cluster policies:
 
 ### EnterpriseCluster (Default)
-Uses standard `ConnectionMultiplexer` - server handles slot routing. See `ManagedIdentityExample.cs`.
+Uses standard `ConnectionMultiplexer` - server handles slot routing.
 
 ### OSSCluster
 Uses `ConnectionMultiplexer` with cluster topology discovery. StackExchange.Redis **automatically** handles cluster topology discovery and MOVED/ASK redirections. **No explicit address remapping is needed** unlike other language clients!
@@ -90,7 +93,7 @@ configurationOptions.AllowAdmin = true;  // For CLUSTER INFO commands
 using var connection = await ConnectionMultiplexer.ConnectAsync(configurationOptions);
 ```
 
-See `ClusterManagedIdentityExample.cs` for the full implementation.
+See any example file for the full implementation - all support both cluster policies.
 
 ## 🔧 Running Examples
 
@@ -98,17 +101,25 @@ See `ClusterManagedIdentityExample.cs` for the full implementation.
 # Restore packages
 dotnet restore
 
-# Run with managed identity (from Azure)
+# Run User-Assigned Managed Identity example
 export AZURE_CLIENT_ID="your-managed-identity-client-id"
 export REDIS_HOSTNAME="your-redis.region.redis.azure.net"
-dotnet run --ManagedIdentity
+dotnet run -- UserAssignedManagedIdentity
 
-# Run with service principal (local development)
+# Run System-Assigned Managed Identity example (on Azure VM/Container Apps)
+export REDIS_HOSTNAME="your-redis.region.redis.azure.net"
+dotnet run -- SystemAssignedManagedIdentity
+
+# Run Service Principal example (local development)
 export AZURE_CLIENT_ID="your-client-id"
 export AZURE_CLIENT_SECRET="your-secret"
 export AZURE_TENANT_ID="your-tenant-id"
 export REDIS_HOSTNAME="your-redis.region.redis.azure.net"
-dotnet run --ServicePrincipal
+dotnet run -- ServicePrincipal
+
+# With OSS Cluster policy
+export REDIS_CLUSTER_POLICY="OSSCluster"
+dotnet run -- UserAssignedManagedIdentity
 ```
 
 ## 🔧 Connection Options

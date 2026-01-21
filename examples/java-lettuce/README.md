@@ -12,7 +12,7 @@ Add to your `pom.xml`:
     <dependency>
         <groupId>io.lettuce</groupId>
         <artifactId>lettuce-core</artifactId>
-        <version>6.8.2.RELEASE</version>
+        <version>7.2.1.RELEASE</version>
     </dependency>
     
     <!-- Entra ID Authentication for Lettuce -->
@@ -30,6 +30,7 @@ Add to your `pom.xml`:
 java-lettuce/
 ├── README.md
 ├── pom.xml
+├── dependencies.json
 └── src/
     └── main/
         └── java/

@@ -1,0 +1,40 @@
+{
+  "language": "Java",
+  "runtime": ">=17",
+  "framework": "Spring Boot",
+  "packageManager": "Maven",
+  "manifestFile": "pom.xml",
+  "dependencies": [
+    {
+      "name": "org.springframework.boot:spring-boot-starter-parent",
+      "version": "3.4.1",
+      "purpose": "Spring Boot parent POM",
+      "repository": "https://mvnrepository.com/artifact/org.springframework.boot/spring-boot-starter-parent"
+    },
+    {
+      "name": "org.springframework.boot:spring-boot-starter-data-redis",
+      "version": "3.4.1",
+      "purpose": "Spring Boot Redis starter with Lettuce",
+      "repository": "https://mvnrepository.com/artifact/org.springframework.boot/spring-boot-starter-data-redis"
+    },
+    {
+      "name": "io.lettuce:lettuce-core",
+      "version": "7.2.1.RELEASE",
+      "purpose": "Lettuce Redis client library with cluster support and io.lettuce.authx",
+      "repository": "https://mvnrepository.com/artifact/io.lettuce/lettuce-core"
+    },
+    {
+      "name": "redis.clients.authentication:redis-authx-entraid",
+      "version": "0.1.1-beta2",
+      "purpose": "Entra ID authentication for Jedis/Lettuce",
+      "repository": "https://github.com/redis/jvm-redis-authx-entraid"
+    },
+    {
+      "name": "com.azure:azure-identity",
+      "version": "1.15.0",
+      "purpose": "Azure Identity SDK for token operations",
+      "repository": "https://mvnrepository.com/artifact/com.azure/azure-identity"
+    }
+  ],
+  "lastUpdated": "2026-01-20"
+}

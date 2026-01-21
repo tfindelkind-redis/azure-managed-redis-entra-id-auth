@@ -1,0 +1,27 @@
+{
+  "language": "Python",
+  "runtime": ">=3.10",
+  "packageManager": "pip",
+  "manifestFile": "requirements.txt",
+  "dependencies": [
+    {
+      "name": "redis",
+      "version": ">=7.1.0",
+      "purpose": "Redis client library",
+      "repository": "https://pypi.org/project/redis/"
+    },
+    {
+      "name": "redis-entraid",
+      "version": ">=1.1.0",
+      "purpose": "Entra ID credential provider for Redis",
+      "repository": "https://pypi.org/project/redis-entraid/"
+    },
+    {
+      "name": "python-dotenv",
+      "version": ">=1.0.0",
+      "purpose": "Environment variable management (optional)",
+      "repository": "https://pypi.org/project/python-dotenv/"
+    }
+  ],
+  "lastUpdated": "2026-01-20"
+}

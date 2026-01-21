@@ -1,0 +1,27 @@
+{
+  "language": "Java",
+  "runtime": ">=17",
+  "packageManager": "Maven",
+  "manifestFile": "pom.xml",
+  "dependencies": [
+    {
+      "name": "io.lettuce:lettuce-core",
+      "version": "7.2.1.RELEASE",
+      "purpose": "Lettuce Redis client library with reactive support",
+      "repository": "https://mvnrepository.com/artifact/io.lettuce/lettuce-core"
+    },
+    {
+      "name": "redis.clients.authentication:redis-authx-entraid",
+      "version": "0.1.1-beta2",
+      "purpose": "Entra ID authentication for Jedis/Lettuce",
+      "repository": "https://github.com/redis/jvm-redis-authx-entraid"
+    },
+    {
+      "name": "org.slf4j:slf4j-simple",
+      "version": "2.0.16",
+      "purpose": "Logging implementation",
+      "repository": "https://mvnrepository.com/artifact/org.slf4j/slf4j-simple"
+    }
+  ],
+  "lastUpdated": "2026-01-20"
+}

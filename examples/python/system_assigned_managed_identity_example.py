@@ -1,33 +1,27 @@
 """
-Azure Managed Redis - Service Principal Authentication Example
+Azure Managed Redis - System-Assigned Managed Identity Authentication Example
 
 This example demonstrates how to connect to Azure Managed Redis using
-a Service Principal with Entra ID authentication.
+a System-Assigned Managed Identity with Entra ID authentication.
 
 CLUSTER POLICY SUPPORT:
 - Enterprise Cluster: Uses standard Redis client (server handles slot routing)
 - OSS Cluster: Uses RedisCluster with address remapping for SSL/SNI
-
-This is useful for:
-- Local development
-- CI/CD pipelines
-- Non-Azure environments
 
 Requirements:
 - redis>=5.0.0
 - redis-entraid>=1.1.0
 
 Environment Variables:
-- AZURE_CLIENT_ID: Application (client) ID of the service principal
-- AZURE_CLIENT_SECRET: Client secret of the service principal
-- AZURE_TENANT_ID: Directory (tenant) ID
 - REDIS_HOSTNAME: Hostname of your Azure Managed Redis instance
 - REDIS_PORT: Port (default: 10000)
 - REDIS_CLUSTER_POLICY: "EnterpriseCluster" or "OSSCluster" (default: EnterpriseCluster)
 
-Before running:
-1. Create a service principal in Azure AD (App Registration)
-2. Create an access policy assignment for the service principal's Object ID
+NOTE: No AZURE_CLIENT_ID needed - Azure provides the identity automatically
+when running on a resource with system-assigned managed identity enabled.
+
+This code should be run from an Azure resource (App Service, VM, etc.)
+that has system-assigned managed identity enabled.
 """
 
 import os
@@ -43,7 +37,10 @@ except ImportError:
 
 from redis import Redis, RedisError
 from redis.cluster import RedisCluster
-from redis_entraid.cred_provider import create_from_service_principal
+from redis_entraid.cred_provider import (
+    create_from_managed_identity,
+    ManagedIdentityType
+)
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -52,26 +49,13 @@ logger = logging.getLogger(__name__)
 def get_config():
     """Load configuration from environment variables."""
     config = {
-        'client_id': os.environ.get('AZURE_CLIENT_ID'),
-        'client_secret': os.environ.get('AZURE_CLIENT_SECRET'),
-        'tenant_id': os.environ.get('AZURE_TENANT_ID'),
         'redis_host': os.environ.get('REDIS_HOSTNAME'),
         'redis_port': int(os.environ.get('REDIS_PORT', 10000)),
         'cluster_policy': os.environ.get('REDIS_CLUSTER_POLICY', 'EnterpriseCluster'),
     }
     
-    missing = []
-    if not config['client_id']:
-        missing.append('AZURE_CLIENT_ID')
-    if not config['client_secret']:
-        missing.append('AZURE_CLIENT_SECRET')
-    if not config['tenant_id']:
-        missing.append('AZURE_TENANT_ID')
     if not config['redis_host']:
-        missing.append('REDIS_HOSTNAME')
-    
-    if missing:
-        raise ValueError(f"Missing required environment variables: {', '.join(missing)}")
+        raise ValueError("REDIS_HOSTNAME environment variable is required")
     
     return config
 
@@ -86,21 +70,18 @@ def create_address_remap(public_hostname: str):
     return remap
 
 
-def create_credential_provider(client_id: str, client_secret: str, tenant_id: str):
-    """Create Entra ID credential provider for service principal."""
-    logger.info(f"Creating credential provider for service principal: {client_id[:8]}...")
-    return create_from_service_principal(
-        client_id=client_id,
-        client_credential=client_secret,
-        tenant_id=tenant_id
+def create_credential_provider():
+    """Create Entra ID credential provider for system-assigned managed identity."""
+    logger.info("Creating credential provider for system-assigned managed identity...")
+    return create_from_managed_identity(
+        identity_type=ManagedIdentityType.SYSTEM_ASSIGNED,
+        resource="https://redis.azure.com/"
     )
 
 
 def run_with_standard_client(config: dict):
     """Run with standard Redis client (Enterprise Cluster policy)."""
-    credential_provider = create_credential_provider(
-        config['client_id'], config['client_secret'], config['tenant_id']
-    )
+    credential_provider = create_credential_provider()
     
     logger.info(f"Connecting to Redis at {config['redis_host']}:{config['redis_port']}")
     
@@ -120,9 +101,7 @@ def run_with_standard_client(config: dict):
 
 def run_with_cluster_client(config: dict):
     """Run with RedisCluster client (OSS Cluster policy)."""
-    credential_provider = create_credential_provider(
-        config['client_id'], config['client_secret'], config['tenant_id']
-    )
+    credential_provider = create_credential_provider()
     address_remap = create_address_remap(config['redis_host'])
     
     logger.info(f"Creating address remapper for {config['redis_host']}")
@@ -148,7 +127,7 @@ def run_demo_operations(client, is_cluster: bool):
     cluster_type = "OSS Cluster" if is_cluster else "Enterprise"
     
     print("\n" + "="*70)
-    print(f"AZURE MANAGED REDIS - SERVICE PRINCIPAL ({cluster_type})")
+    print(f"AZURE MANAGED REDIS - SYSTEM-ASSIGNED MI ({cluster_type})")
     print("="*70 + "\n")
     
     # Test 1: PING
@@ -162,8 +141,8 @@ def run_demo_operations(client, is_cluster: bool):
     
     # Test 2: SET
     print("2. Testing SET operation...")
-    test_key = f"python-sp-test:{datetime.now().isoformat()}"
-    test_value = "Hello from Python with Service Principal!"
+    test_key = f"python-sysmi-test:{datetime.now().isoformat()}"
+    test_value = "Hello from Python with System-Assigned MI!"
     try:
         client.set(test_key, test_value, ex=60)
         print(f"   ✅ SET '{test_key}' = '{test_value}'\n")
@@ -182,7 +161,7 @@ def run_demo_operations(client, is_cluster: bool):
     
     # Test 4: INCR
     print("4. Testing INCR operation...")
-    counter_key = "python-sp-counter"
+    counter_key = "python-sysmi-counter"
     try:
         new_value = client.incr(counter_key)
         print(f"   ✅ INCR '{counter_key}' = {new_value}\n")
@@ -217,9 +196,8 @@ def main():
         is_oss_cluster = config['cluster_policy'].lower() == 'osscluster'
         
         print(f"\nCluster Policy: {config['cluster_policy']}")
-        print(f"Auth Method: Service Principal")
-        print(f"Client ID: {config['client_id'][:8]}...")
-        print(f"Tenant ID: {config['tenant_id'][:8]}...\n")
+        print(f"Auth Method: System-Assigned Managed Identity")
+        print(f"(No Client ID required - using VM's system identity)\n")
         
         if is_oss_cluster:
             run_with_cluster_client(config)

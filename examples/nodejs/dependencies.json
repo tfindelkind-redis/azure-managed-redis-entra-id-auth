@@ -1,0 +1,27 @@
+{
+  "language": "Node.js",
+  "runtime": ">=18.0.0",
+  "packageManager": "npm",
+  "manifestFile": "package.json",
+  "dependencies": [
+    {
+      "name": "@redis/client",
+      "version": ">=5.10.0",
+      "purpose": "Redis client library",
+      "repository": "https://www.npmjs.com/package/@redis/client"
+    },
+    {
+      "name": "@redis/entraid",
+      "version": ">=5.10.0",
+      "purpose": "Entra ID credential provider for Redis (unified versioning with @redis/client)",
+      "repository": "https://www.npmjs.com/package/@redis/entraid"
+    },
+    {
+      "name": "@azure/identity",
+      "version": ">=4.5.0",
+      "purpose": "Azure Identity SDK (optional, for DefaultAzureCredential)",
+      "repository": "https://www.npmjs.com/package/@azure/identity"
+    }
+  ],
+  "lastUpdated": "2026-01-20"
+}

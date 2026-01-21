@@ -6,14 +6,44 @@ set -e
 
 echo "=== Starting runtime installation ==="
 
-# Update package lists
-apt-get update
+# ============================================
+# Retry logic for transient apt failures
+# ============================================
+APT_MAX_RETRIES=5
+APT_RETRY_DELAY=30
+
+apt_retry() {
+    local cmd="$@"
+    local attempt=1
+    
+    while [ $attempt -le $APT_MAX_RETRIES ]; do
+        echo "Attempt $attempt/$APT_MAX_RETRIES: $cmd"
+        if eval "$cmd"; then
+            return 0
+        fi
+        
+        echo "Command failed. Waiting ${APT_RETRY_DELAY}s before retry..."
+        sleep $APT_RETRY_DELAY
+        
+        # Clean apt cache and fix any broken state
+        rm -rf /var/lib/apt/lists/*
+        apt-get clean
+        
+        attempt=$((attempt + 1))
+    done
+    
+    echo "ERROR: Command failed after $APT_MAX_RETRIES attempts: $cmd"
+    return 1
+}
+
+# Update package lists with retry
+apt_retry "apt-get update"
 
 # ============================================
 # Python 3.11+ with pip
 # ============================================
 echo "Installing Python..."
-apt-get install -y python3 python3-pip python3-venv
+apt_retry "apt-get install -y python3 python3-pip python3-venv"
 python3 --version
 pip3 --version
 
@@ -22,7 +52,7 @@ pip3 --version
 # ============================================
 echo "Installing Node.js 20..."
 curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-apt-get install -y nodejs
+apt_retry "apt-get install -y nodejs"
 node --version
 npm --version
 
@@ -33,15 +63,15 @@ echo "Installing .NET 8.0..."
 wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
 dpkg -i packages-microsoft-prod.deb
 rm packages-microsoft-prod.deb
-apt-get update
-apt-get install -y dotnet-sdk-8.0
+apt_retry "apt-get update"
+apt_retry "apt-get install -y dotnet-sdk-8.0"
 dotnet --version
 
 # ============================================
 # Java 17 (OpenJDK) + Maven
 # ============================================
 echo "Installing Java 17 and Maven..."
-apt-get install -y openjdk-17-jdk maven
+apt_retry "apt-get install -y openjdk-17-jdk maven"
 java --version
 mvn --version
 
@@ -62,13 +92,13 @@ go version
 # Git (for cloning the examples)
 # ============================================
 echo "Installing Git..."
-apt-get install -y git
+apt_retry "apt-get install -y git"
 
 # ============================================
 # Additional utilities
 # ============================================
 echo "Installing additional utilities..."
-apt-get install -y curl jq unzip openssl net-tools dnsutils
+apt_retry "apt-get install -y curl jq unzip openssl net-tools dnsutils"
 
 # ============================================
 # Azure CLI (for debugging/troubleshooting)
@@ -80,7 +110,7 @@ curl -sL https://aka.ms/InstallAzureCLIDeb | bash
 # NTP for time synchronization (critical for Entra ID!)
 # ============================================
 echo "Configuring NTP time synchronization..."
-apt-get install -y chrony
+apt_retry "apt-get install -y chrony"
 systemctl enable chrony
 systemctl start chrony
 

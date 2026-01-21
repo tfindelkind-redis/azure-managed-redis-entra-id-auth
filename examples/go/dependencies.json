@@ -1,0 +1,21 @@
+{
+  "language": "Go",
+  "runtime": ">=1.21",
+  "packageManager": "go mod",
+  "manifestFile": "go.mod",
+  "dependencies": [
+    {
+      "name": "github.com/redis/go-redis/v9",
+      "version": "v9.17.2",
+      "purpose": "Go Redis client library",
+      "repository": "https://github.com/redis/go-redis"
+    },
+    {
+      "name": "github.com/redis/go-redis-entraid",
+      "version": "v1.0.7",
+      "purpose": "Entra ID credential provider for go-redis",
+      "repository": "https://github.com/redis/go-redis-entraid"
+    }
+  ],
+  "lastUpdated": "2026-01-20"
+}

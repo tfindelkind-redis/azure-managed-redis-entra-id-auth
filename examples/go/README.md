@@ -95,20 +95,23 @@ provider, err := entraid.NewConfidentialCredentialsProvider(
 go/
 ├── README.md
 ├── go.mod
-├── managed_identity_example.go           # Enterprise policy
-├── cluster_managed_identity_example.go   # OSS Cluster policy
-└── service_principal_example.go          # Service principal auth
+├── dependencies.json
+├── user_assigned_managed_identity_example.go    # User-Assigned MI
+├── system_assigned_managed_identity_example.go  # System-Assigned MI
+└── service_principal_example.go                 # Service Principal auth
 ```
+
+All examples support both cluster policies via the `REDIS_CLUSTER_POLICY` environment variable.
 
 ## 🔧 Cluster Policy Support
 
 Azure Managed Redis supports two cluster policies:
 
 ### EnterpriseCluster (Default)
-Uses `redis.NewClient()` - server handles slot routing. See `managed_identity_example.go`.
+Uses `redis.NewClient()` - server handles slot routing.
 
 ### OSSCluster
-Uses `redis.NewClusterClient()` with custom `Dialer` for address remapping. The key challenge is that Azure returns internal IPs in CLUSTER SLOTS responses that are unreachable from outside Azure:
+Uses `redis.NewClusterClient()` with custom `Dialer` for address remapping. All examples automatically detect this via `REDIS_CLUSTER_POLICY` environment variable. The key challenge is that Azure returns internal IPs in CLUSTER SLOTS responses that are unreachable from outside Azure:
 
 ```go
 import (
@@ -145,7 +148,7 @@ client := redis.NewClusterClient(&redis.ClusterOptions{
 })
 ```
 
-See `cluster_managed_identity_example.go` for the full implementation.
+See any example file for the full implementation - all support both cluster policies.
 
 ## 🔧 Running Examples
 
@@ -153,17 +156,25 @@ See `cluster_managed_identity_example.go` for the full implementation.
 # Initialize module
 go mod tidy
 
-# Run with managed identity (from Azure)
+# Run User-Assigned Managed Identity example
 export AZURE_CLIENT_ID="your-managed-identity-client-id"
 export REDIS_HOSTNAME="your-redis.region.redis.azure.net"
-go run managed_identity_example.go
+go run user_assigned_managed_identity_example.go
 
-# Run with service principal (local development)
+# Run System-Assigned Managed Identity example (on Azure VM/Container Apps)
+export REDIS_HOSTNAME="your-redis.region.redis.azure.net"
+go run system_assigned_managed_identity_example.go
+
+# Run Service Principal example (local development)
 export AZURE_CLIENT_ID="your-client-id"
 export AZURE_CLIENT_SECRET="your-secret"
 export AZURE_TENANT_ID="your-tenant-id"
 export REDIS_HOSTNAME="your-redis.region.redis.azure.net"
 go run service_principal_example.go
+
+# With OSS Cluster policy
+export REDIS_CLUSTER_POLICY="OSSCluster"
+go run user_assigned_managed_identity_example.go
 ```
 
 ## 🔧 Custom Configuration

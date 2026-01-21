@@ -1,43 +1,36 @@
-# Spring Boot + Lettuce + Azure Managed Redis (Cluster OSS) with Entra ID
+# Spring Boot + Lettuce + Azure Managed Redis with Entra ID
 
-This example demonstrates how to connect a **Spring Boot** application to **Azure Managed Redis (Cluster OSS tier)** using **Lettuce** with **Entra ID authentication** via **User-Assigned Managed Identity**.
+This example demonstrates how to connect a **Spring Boot** application to **Azure Managed Redis** using **Lettuce** with **Entra ID authentication**.
 
 ## 🎯 Key Features
 
-This example specifically addresses common issues with Lettuce + Azure Managed Redis:
+### Three Authentication Methods (via Spring Profiles)
 
-### 1. MappingSocketAddressResolver (CRITICAL!)
+| Profile | Auth Method | Required Environment Variables |
+|---------|-------------|-------------------------------|
+| `user-mi` | User-Assigned Managed Identity | `AZURE_CLIENT_ID`, `REDIS_HOSTNAME` |
+| `system-mi` | System-Assigned Managed Identity | `REDIS_HOSTNAME` |
+| `service-principal` | Service Principal | `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`, `REDIS_HOSTNAME` |
 
-Azure Managed Redis cluster nodes advertise internal IP addresses in `CLUSTER SLOTS` responses. Without proper address mapping, Lettuce will try to connect directly to these internal IPs and fail.
+### Two Cluster Policies
 
-This example includes a `MappingSocketAddressResolver` that:
+| Policy | Client Type | Use Case |
+|--------|-------------|----------|
+| `EnterpriseCluster` | Standard `RedisClient` | Server handles slot routing (default) |
+| `OSSCluster` | `RedisClusterClient` | Client-side cluster-aware with address remapping |
+
+### MappingSocketAddressResolver (for OSS Cluster)
+
+Azure Managed Redis cluster nodes advertise internal IP addresses in `CLUSTER SLOTS` responses. For OSS Cluster policy, this example includes a `MappingSocketAddressResolver` that:
 - Intercepts connection attempts to internal cluster IPs
-- Remaps them to the public Azure hostname
-- Ensures all connections go through Azure's load balancer
-
-### 2. Clock Skew Detection
-
-A common cause of Entra ID authentication failures is **clock skew** - when your system's clock is out of sync with Azure's servers.
-
-Symptoms include:
-- Tokens appear expired immediately after fetching
-- Token expiration dates are in the past
-- Intermittent authentication failures
-
-This example includes a `TokenValidationService` that:
-- Compares local time to Azure's time
-- Validates token timestamps
-- Provides clear error messages for clock skew issues
-
-### 3. Automatic Token Refresh
-
-Uses Lettuce's `ReauthenticateBehavior.ON_NEW_CREDENTIALS` to automatically re-authenticate when tokens are refreshed.
+- Remaps them to the public Azure hostname for SSL/SNI verification
+- Ensures all connections work correctly through Azure's load balancer
 
 ## 📋 Prerequisites
 
-1. **Azure Managed Redis** (Cluster OSS tier) with Entra ID authentication enabled
-2. **User-Assigned Managed Identity** with access policy in the Redis instance
-3. **Azure VM or Container Apps** with the managed identity attached
+1. **Azure Managed Redis** with Entra ID authentication enabled
+2. **Managed Identity** or **Service Principal** with access policy in the Redis instance
+3. **Azure VM or Container Apps** with the identity attached (for managed identity auth)
 4. **Java 17+**
 5. **Maven**
 
@@ -46,9 +39,18 @@ Uses Lettuce's `ReauthenticateBehavior.ON_NEW_CREDENTIALS` to automatically re-a
 ### Environment Variables
 
 ```bash
-export AZURE_CLIENT_ID="your-managed-identity-client-id"
+# Common - Required for all auth methods
 export REDIS_HOSTNAME="your-redis.region.redis.azure.net"
 export REDIS_PORT="10000"  # Default for Azure Managed Redis
+export REDIS_CLUSTER_POLICY="EnterpriseCluster"  # or "OSSCluster"
+
+# For User-Assigned Managed Identity (profile: user-mi)
+export AZURE_CLIENT_ID="your-managed-identity-client-id"
+
+# For Service Principal (profile: service-principal)
+export AZURE_CLIENT_ID="your-sp-client-id"
+export AZURE_CLIENT_SECRET="your-sp-client-secret"
+export AZURE_TENANT_ID="your-tenant-id"
 ```
 
 ### Application Properties
@@ -57,82 +59,127 @@ See `src/main/resources/application.yml` for all configuration options.
 
 ## 🚀 Running the Example
 
+### With User-Assigned Managed Identity
 ```bash
-# Build
-mvn clean package -DskipTests
+export AZURE_CLIENT_ID="your-mi-client-id"
+export REDIS_HOSTNAME="your-redis.region.redis.azure.net"
 
-# Run
-mvn spring-boot:run
-
-# Or with explicit configuration
-AZURE_CLIENT_ID=xxx REDIS_HOSTNAME=xxx.redis.azure.net mvn spring-boot:run
+mvn spring-boot:run -Dspring-boot.run.profiles=user-mi
 ```
 
-## 🔍 Troubleshooting
-
-### Token Expiration in the Past
-
-If you see logs like:
-```
-❌ TOKEN IS ALREADY EXPIRED!
-   Expires at: 2024-01-15T10:00:00Z
-   Current time: 2024-01-15T10:05:00Z
-   Expired 300 seconds ago
-```
-
-**Solution**: Synchronize your system clock:
+### With System-Assigned Managed Identity
 ```bash
-# On Linux
-sudo timedatectl set-ntp true
+export REDIS_HOSTNAME="your-redis.region.redis.azure.net"
 
-# On Azure VM, ensure the Azure Guest Agent is running
-sudo systemctl status waagent
+mvn spring-boot:run -Dspring-boot.run.profiles=system-mi
 ```
 
-### Connection Refused to 10.x.x.x
+### With Service Principal
+```bash
+export AZURE_CLIENT_ID="your-sp-client-id"
+export AZURE_CLIENT_SECRET="your-sp-secret"
+export AZURE_TENANT_ID="your-tenant-id"
+export REDIS_HOSTNAME="your-redis.region.redis.azure.net"
 
-If you see connection errors to private IPs:
+mvn spring-boot:run -Dspring-boot.run.profiles=service-principal
 ```
-Connection refused: /10.0.0.5:10000
+
+### With OSS Cluster Policy
+```bash
+export REDIS_CLUSTER_POLICY="OSSCluster"
+mvn spring-boot:run -Dspring-boot.run.profiles=user-mi
 ```
-
-**This means the MappingSocketAddressResolver is not working correctly.**
-
-Check that:
-1. The `ClientResources` bean with the resolver is being created
-2. The resolver is passed to the `RedisClusterClient`
-3. Logs show "MappingResolver" entries
-
-### Intermittent Authentication Failures
-
-Can be caused by:
-1. **Clock skew** - see above
-2. **Token refresh timing** - ensure `ON_NEW_CREDENTIALS` behavior is set
-3. **Network latency** - increase timeout values
-
-### ACL WHOAMI Returns Unexpected User
-
-If `ACL WHOAMI` doesn't return your managed identity's OID:
-1. Verify the access policy is correctly configured in Azure
-2. Check that the OID in the token matches the access policy
-3. Ensure you're using the correct managed identity
 
 ## 📁 Project Structure
 
 ```
-├── pom.xml
+java-lettuce-springboot/
 ├── README.md
-└── src/main/java/com/example/
-    ├── Application.java
-    ├── config/
-    │   └── RedisClusterConfig.java      # Main configuration with MappingSocketAddressResolver
-    └── service/
-        ├── TokenValidationService.java  # Clock skew detection and token validation
-        └── RedisTestService.java        # Connection tests
+├── pom.xml
+├── dependencies.json
+└── src/main/
+    ├── java/com/example/
+    │   ├── Application.java           # Spring Boot entry point
+    │   ├── config/
+    │   │   └── RedisConfig.java       # Unified Redis configuration
+    │   │                               # - Supports all 3 auth methods
+    │   │                               # - Supports both cluster policies
+    │   │                               # - MappingSocketAddressResolver for OSS Cluster
+    │   └── service/
+    │       └── RedisTestService.java  # Demo operations (PING, SET, GET, etc.)
+    └── resources/
+        └── application.yml            # Configuration with profile support
 ```
 
-## 📚 References
+## 🔍 How It Works
 
-- [Azure Cache for Redis - Lettuce Best Practices](https://github.com/Azure/AzureCacheForRedis/blob/main/Lettuce%20Best%20Practices.md)
-- [redis-authx-entraid GitHub](https://github.com/redis/redis-authx-java)
-- [Lettuce Reference Guide](https://lettuce.io/core/release/reference/)
+### Profile-Based Authentication
+
+The `RedisConfig` class reads `azure.auth.type` from the active profile and creates the appropriate credentials provider:
+
+```java
+switch (authType) {
+    case "user-assigned-managed-identity":
+        authConfig = EntraIDTokenAuthConfigBuilder.builder()
+            .userAssignedManagedIdentity(CLIENT_ID, managedIdentityClientId)
+            .scopes(Set.of(REDIS_SCOPE))
+            .build();
+        break;
+        
+    case "system-assigned-managed-identity":
+        authConfig = EntraIDTokenAuthConfigBuilder.builder()
+            .systemAssignedManagedIdentity()
+            .scopes(Set.of(REDIS_SCOPE))
+            .build();
+        break;
+        
+    case "service-principal":
+        authConfig = EntraIDTokenAuthConfigBuilder.builder()
+            .clientId(servicePrincipalClientId)
+            .secret(servicePrincipalClientSecret)
+            .authority("https://login.microsoftonline.com/" + tenantId)
+            .scopes(Set.of(REDIS_SCOPE + "/.default"))
+            .build();
+        break;
+}
+```
+
+### Cluster Policy-Based Client Selection
+
+The configuration creates either a standard `RedisClient` or `RedisClusterClient` based on the cluster policy:
+
+- **EnterpriseCluster**: Uses `RedisClient` - server handles slot routing transparently
+- **OSSCluster**: Uses `RedisClusterClient` with `MappingSocketAddressResolver` for address remapping
+
+## 🔧 Troubleshooting
+
+### Connection Refused to 10.x.x.x (OSS Cluster)
+
+If you see connection errors to private IPs with OSS Cluster:
+```
+Connection refused: /10.0.0.5:10000
+```
+
+This means address mapping isn't working. Ensure:
+1. `REDIS_CLUSTER_POLICY=OSSCluster` is set
+2. The `MappingSocketAddressResolver` is being created
+
+### Token Expiration Issues
+
+If tokens appear expired immediately:
+1. Check system clock: `date`
+2. Sync with NTP: `sudo timedatectl set-ntp true`
+
+### "Unknown auth type" Error
+
+Ensure you're running with a valid Spring profile:
+```bash
+-Dspring-boot.run.profiles=user-mi   # or system-mi, service-principal
+```
+
+## 📚 Dependencies
+
+- **Spring Boot 3.3+**
+- **Lettuce 6.5+** with cluster support
+- **redis-authx-entraid 0.1.1-beta2** for Entra ID authentication
+- **Azure Identity** for token management
