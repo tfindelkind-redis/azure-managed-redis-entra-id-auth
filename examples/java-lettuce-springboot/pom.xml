@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.4.1</version>
+        <version>3.4.13</version>
         <relativePath/>
     </parent>
 
@@ -33,7 +33,7 @@
         <java.version>17</java.version>
         <lettuce.version>7.2.1.RELEASE</lettuce.version>
         <redis-authx.version>0.1.1-beta2</redis-authx.version>
-        <azure-identity.version>1.15.0</azure-identity.version>
+        <azure-identity.version>1.18.1</azure-identity.version>
     </properties>
 
     <dependencies>

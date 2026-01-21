@@ -18,10 +18,10 @@
     },
     {
       "name": "org.slf4j:slf4j-simple",
-      "version": "2.0.9",
+      "version": "2.0.17",
       "purpose": "Logging implementation",
       "repository": "https://mvnrepository.com/artifact/org.slf4j/slf4j-simple"
     }
   ],
-  "lastUpdated": "2026-01-20"
+  "lastUpdated": "2026-01-21"
 }

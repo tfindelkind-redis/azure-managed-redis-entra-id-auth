@@ -18,10 +18,10 @@
     },
     {
       "name": "@azure/identity",
-      "version": ">=4.5.0",
+      "version": ">=4.13.0",
       "purpose": "Azure Identity SDK (optional, for DefaultAzureCredential)",
       "repository": "https://www.npmjs.com/package/@azure/identity"
     }
   ],
-  "lastUpdated": "2026-01-20"
+  "lastUpdated": "2026-01-21"
 }

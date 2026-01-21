@@ -7,13 +7,13 @@
   "dependencies": [
     {
       "name": "org.springframework.boot:spring-boot-starter-parent",
-      "version": "3.4.1",
+      "version": "3.4.13",
       "purpose": "Spring Boot parent POM",
       "repository": "https://mvnrepository.com/artifact/org.springframework.boot/spring-boot-starter-parent"
     },
     {
       "name": "org.springframework.boot:spring-boot-starter-data-redis",
-      "version": "3.4.1",
+      "version": "3.4.13",
       "purpose": "Spring Boot Redis starter with Lettuce",
       "repository": "https://mvnrepository.com/artifact/org.springframework.boot/spring-boot-starter-data-redis"
     },
@@ -31,10 +31,10 @@
     },
     {
       "name": "com.azure:azure-identity",
-      "version": "1.15.0",
+      "version": "1.18.1",
       "purpose": "Azure Identity SDK for token operations",
       "repository": "https://mvnrepository.com/artifact/com.azure/azure-identity"
     }
   ],
-  "lastUpdated": "2026-01-20"
+  "lastUpdated": "2026-01-21"
 }

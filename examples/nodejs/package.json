@@ -11,7 +11,7 @@
   "dependencies": {
     "@redis/client": "^5.10.0",
     "@redis/entraid": "^5.10.0",
-    "@azure/identity": "^4.5.0"
+    "@azure/identity": "^4.13.0"
   },
   "engines": {
     "node": ">=18.0.0"
