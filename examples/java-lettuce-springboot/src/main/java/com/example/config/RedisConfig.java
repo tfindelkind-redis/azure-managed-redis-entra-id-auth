@@ -195,10 +195,10 @@ public class RedisConfig {
     @Bean
     public ClusterClientOptions clusterClientOptions() {
         ClusterTopologyRefreshOptions topologyRefresh = ClusterTopologyRefreshOptions.builder()
-            .enablePeriodicRefresh(Duration.ofSeconds(5))
+            .enablePeriodicRefresh(Duration.ofMinutes(5))
             .dynamicRefreshSources(false)  // Important for Azure
-            .adaptiveRefreshTriggersTimeout(Duration.ofSeconds(5))
-            .enableAllAdaptiveRefreshTriggers()
+            // Note: enableAllAdaptiveRefreshTriggers() removed - it causes excessive re-authentication
+            // in OSS Cluster mode with Entra ID. Periodic refresh is sufficient.
             .build();
 
         return ClusterClientOptions.builder()

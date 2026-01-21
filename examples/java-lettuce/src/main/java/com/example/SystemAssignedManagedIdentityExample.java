@@ -233,8 +233,9 @@ public class SystemAssignedManagedIdentityExample {
             
             ClusterClientOptions clusterOptions = ClusterClientOptions.builder()
                 .topologyRefreshOptions(ClusterTopologyRefreshOptions.builder()
-                    .enablePeriodicRefresh(Duration.ofMinutes(1))
-                    .enableAllAdaptiveRefreshTriggers()
+                    .enablePeriodicRefresh(Duration.ofMinutes(5))
+                    // Note: enableAllAdaptiveRefreshTriggers() removed - it causes excessive re-authentication
+                    // in OSS Cluster mode with Entra ID. Periodic refresh is sufficient.
                     .build())
                 .sslOptions(sslOptions)
                 .socketOptions(io.lettuce.core.SocketOptions.builder()

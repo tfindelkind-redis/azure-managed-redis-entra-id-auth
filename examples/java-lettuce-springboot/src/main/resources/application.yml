@@ -46,6 +46,9 @@ logging:
     root: INFO
     com.example: DEBUG
     io.lettuce.core: INFO
+    # Suppress verbose Lettuce handshake/auth messages during cluster refresh
+    io.lettuce.core.RedisHandshake: WARN
+    io.lettuce.core.RedisAuthenticationHandler: WARN
     redis.clients.authentication: DEBUG
     com.azure.identity: INFO
     

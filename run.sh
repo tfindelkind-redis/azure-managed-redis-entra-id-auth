@@ -788,94 +788,108 @@ run_all() {
         echo ""
     fi
     
-    local passed=0
-    local failed=0
-    local results=()
+    local total_passed=0
+    local total_failed=0
     
-    # All examples now support both Enterprise and OSS Cluster policies
+    # Results arrays (language_authmethod format: 0=fail, 1=pass)
+    local python_user=0 python_sys=0 python_sp=0
+    local nodejs_user=0 nodejs_sys=0 nodejs_sp=0
+    local dotnet_user=0 dotnet_sys=0 dotnet_sp=0
+    local java_user=0 java_sys=0 java_sp=0
+    local go_user=0 go_sys=0 go_sp=0
+    local jedis_user=0 jedis_sys=0 jedis_sp=0
+    local spring_user=0 spring_sys=0 spring_sp=0
     
-    # Python
-    if run_python; then
-        results+=("Python: ✅ PASSED")
-        ((passed++))
-    else
-        results+=("Python: ❌ FAILED")
-        ((failed++))
-    fi
+    # Python tests
+    if run_python "user-mi"; then python_user=1; ((total_passed++)); else ((total_failed++)); fi
+    if run_python "system-mi"; then python_sys=1; ((total_passed++)); else ((total_failed++)); fi
+    if run_python "sp"; then python_sp=1; ((total_passed++)); else ((total_failed++)); fi
     
-    # Node.js
-    if run_nodejs; then
-        results+=("Node.js: ✅ PASSED")
-        ((passed++))
-    else
-        results+=("Node.js: ❌ FAILED")
-        ((failed++))
-    fi
+    # Node.js tests
+    if run_nodejs "user-mi"; then nodejs_user=1; ((total_passed++)); else ((total_failed++)); fi
+    if run_nodejs "system-mi"; then nodejs_sys=1; ((total_passed++)); else ((total_failed++)); fi
+    if run_nodejs "sp"; then nodejs_sp=1; ((total_passed++)); else ((total_failed++)); fi
     
-    # .NET
-    if run_dotnet; then
-        results+=(".NET: ✅ PASSED")
-        ((passed++))
-    else
-        results+=(".NET: ❌ FAILED")
-        ((failed++))
-    fi
+    # .NET tests
+    if run_dotnet "user-mi"; then dotnet_user=1; ((total_passed++)); else ((total_failed++)); fi
+    if run_dotnet "system-mi"; then dotnet_sys=1; ((total_passed++)); else ((total_failed++)); fi
+    if run_dotnet "sp"; then dotnet_sp=1; ((total_passed++)); else ((total_failed++)); fi
     
-    # Java Lettuce (uses appropriate client based on policy)
-    if run_java; then
-        results+=("Java Lettuce: ✅ PASSED")
-        ((passed++))
-    else
-        results+=("Java Lettuce: ❌ FAILED")
-        ((failed++))
-    fi
+    # Java Lettuce tests
+    if run_java "user-mi"; then java_user=1; ((total_passed++)); else ((total_failed++)); fi
+    if run_java "system-mi"; then java_sys=1; ((total_passed++)); else ((total_failed++)); fi
+    if run_java "sp"; then java_sp=1; ((total_passed++)); else ((total_failed++)); fi
     
-    # Go
-    if run_go; then
-        results+=("Go: ✅ PASSED")
-        ((passed++))
-    else
-        results+=("Go: ❌ FAILED")
-        ((failed++))
-    fi
+    # Go tests
+    if run_go "user-mi"; then go_user=1; ((total_passed++)); else ((total_failed++)); fi
+    if run_go "system-mi"; then go_sys=1; ((total_passed++)); else ((total_failed++)); fi
+    if run_go "sp"; then go_sp=1; ((total_passed++)); else ((total_failed++)); fi
     
-    # Java Jedis (now supports both Enterprise and OSS Cluster)
-    if run_jedis; then
-        results+=("Java Jedis: ✅ PASSED")
-        ((passed++))
-    else
-        results+=("Java Jedis: ❌ FAILED")
-        ((failed++))
-    fi
+    # Java Jedis tests
+    if run_jedis "user-mi"; then jedis_user=1; ((total_passed++)); else ((total_failed++)); fi
+    if run_jedis "system-mi"; then jedis_sys=1; ((total_passed++)); else ((total_failed++)); fi
+    if run_jedis "sp"; then jedis_sp=1; ((total_passed++)); else ((total_failed++)); fi
     
-    # Spring Boot
-    if run_springboot; then
-        results+=("Spring Boot: ✅ PASSED")
-        ((passed++))
-    else
-        results+=("Spring Boot: ❌ FAILED")
-        ((failed++))
-    fi
+    # Spring Boot tests
+    if run_springboot "user-mi"; then spring_user=1; ((total_passed++)); else ((total_failed++)); fi
+    if run_springboot "system-mi"; then spring_sys=1; ((total_passed++)); else ((total_failed++)); fi
+    if run_springboot "sp"; then spring_sp=1; ((total_passed++)); else ((total_failed++)); fi
     
-    # Summary
+    # Helper function to convert 0/1 to emoji
+    result_icon() { [ "$1" -eq 1 ] && echo "✅" || echo "❌"; }
+    
+    # Helper to get status
+    get_status() {
+        local u=$1 s=$2 p=$3
+        if [ $u -eq 1 ] && [ $s -eq 1 ] && [ $p -eq 1 ]; then
+            echo -e "${GREEN}PASSED${NC}"
+        elif [ $u -eq 0 ] && [ $s -eq 0 ] && [ $p -eq 0 ]; then
+            echo -e "${RED}FAILED${NC}"
+        else
+            echo -e "${YELLOW}PARTIAL${NC}"
+        fi
+    }
+    
+    # Print Summary Table
     echo ""
-    echo -e "${BLUE}==========================================${NC}"
-    echo -e "${BLUE}  Test Summary (${REDIS_CLUSTER_POLICY})${NC}"
-    echo -e "${BLUE}==========================================${NC}"
-    echo ""
-    echo -e "${CYAN}Each language runs 3 auth methods:${NC}"
-    echo -e "  • User-Assigned Managed Identity"
-    echo -e "  • System-Assigned Managed Identity"
-    echo -e "  • Service Principal"
-    echo ""
-    for result in "${results[@]}"; do
-        echo "  $result"
-    done
-    echo ""
-    echo -e "  Total: ${GREEN}$passed passed${NC}, ${RED}$failed failed${NC}"
+    echo -e "${BLUE}╔══════════════════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BLUE}║               TEST SUMMARY - ${REDIS_CLUSTER_POLICY} Cluster Policy                       ║${NC}"
+    echo -e "${BLUE}╠══════════════════════════════════════════════════════════════════════════════╣${NC}"
+    echo -e "${BLUE}║${NC} ${CYAN}Language${NC}        │ ${CYAN}User-MI${NC} │ ${CYAN}System-MI${NC} │ ${CYAN}Service Principal${NC} │ ${CYAN}Status${NC}    ${BLUE}║${NC}"
+    echo -e "${BLUE}╠══════════════════════════════════════════════════════════════════════════════╣${NC}"
+    
+    printf "${BLUE}║${NC} %-14s │    %s   │     %s    │         %s         │ %b  ${BLUE}║${NC}\n" \
+        "Python" "$(result_icon $python_user)" "$(result_icon $python_sys)" "$(result_icon $python_sp)" "$(get_status $python_user $python_sys $python_sp)"
+    printf "${BLUE}║${NC} %-14s │    %s   │     %s    │         %s         │ %b  ${BLUE}║${NC}\n" \
+        "Node.js" "$(result_icon $nodejs_user)" "$(result_icon $nodejs_sys)" "$(result_icon $nodejs_sp)" "$(get_status $nodejs_user $nodejs_sys $nodejs_sp)"
+    printf "${BLUE}║${NC} %-14s │    %s   │     %s    │         %s         │ %b  ${BLUE}║${NC}\n" \
+        ".NET" "$(result_icon $dotnet_user)" "$(result_icon $dotnet_sys)" "$(result_icon $dotnet_sp)" "$(get_status $dotnet_user $dotnet_sys $dotnet_sp)"
+    printf "${BLUE}║${NC} %-14s │    %s   │     %s    │         %s         │ %b  ${BLUE}║${NC}\n" \
+        "Java Lettuce" "$(result_icon $java_user)" "$(result_icon $java_sys)" "$(result_icon $java_sp)" "$(get_status $java_user $java_sys $java_sp)"
+    printf "${BLUE}║${NC} %-14s │    %s   │     %s    │         %s         │ %b  ${BLUE}║${NC}\n" \
+        "Go" "$(result_icon $go_user)" "$(result_icon $go_sys)" "$(result_icon $go_sp)" "$(get_status $go_user $go_sys $go_sp)"
+    printf "${BLUE}║${NC} %-14s │    %s   │     %s    │         %s         │ %b  ${BLUE}║${NC}\n" \
+        "Java Jedis" "$(result_icon $jedis_user)" "$(result_icon $jedis_sys)" "$(result_icon $jedis_sp)" "$(get_status $jedis_user $jedis_sys $jedis_sp)"
+    printf "${BLUE}║${NC} %-14s │    %s   │     %s    │         %s         │ %b  ${BLUE}║${NC}\n" \
+        "Spring Boot" "$(result_icon $spring_user)" "$(result_icon $spring_sys)" "$(result_icon $spring_sp)" "$(get_status $spring_user $spring_sys $spring_sp)"
+    
+    echo -e "${BLUE}╠══════════════════════════════════════════════════════════════════════════════╣${NC}"
+    printf "${BLUE}║${NC} ${CYAN}Total:${NC} ${GREEN}%d passed${NC}, ${RED}%d failed${NC} out of 21 tests                                 ${BLUE}║${NC}\n" "$total_passed" "$total_failed"
+    echo -e "${BLUE}╚══════════════════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
     
-    [ $failed -eq 0 ] && return 0 || return 1
+    # Notes for Jedis limitations on OSS Cluster
+    if [ "$REDIS_CLUSTER_POLICY" = "OSSCluster" ]; then
+        local jedis_total=$((jedis_user + jedis_sys + jedis_sp))
+        if [ $jedis_total -lt 3 ]; then
+            echo -e "${YELLOW}⚠️  Note: Java Jedis has limited OSS Cluster support with Entra ID.${NC}"
+            echo -e "${YELLOW}   MOVED redirects to internal IPs cannot be followed.${NC}"
+            echo -e "${YELLOW}   Recommendation: Use Lettuce for OSS Cluster deployments.${NC}"
+            echo ""
+        fi
+    fi
+    
+    [ $total_failed -eq 0 ] && return 0 || return 1
 }
 
 # Print usage
