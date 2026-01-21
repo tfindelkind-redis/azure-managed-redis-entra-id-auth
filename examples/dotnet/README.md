@@ -172,6 +172,16 @@ catch (RedisConnectionException ex)
 - Ensure SSL/TLS is enabled (Azure Managed Redis requires it)
 - Check network connectivity and firewall rules
 
+## ✅ Test Results
+
+This example has been tested with **Azure Managed Redis (Balanced_B1)** using **OSS Cluster policy**:
+
+| Auth Method | Status |
+|-------------|--------|
+| User-Assigned MI | ✅ PASS |
+| System-Assigned MI | ✅ PASS |
+| Service Principal | ✅ PASS |
+
 ## 📚 Resources
 
 - [StackExchange.Redis Documentation](https://stackexchange.github.io/StackExchange.Redis/)

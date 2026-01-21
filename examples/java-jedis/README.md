@@ -2,6 +2,8 @@
 
 This directory contains Java examples using the Jedis client for authenticating to Azure Managed Redis with Microsoft Entra ID.
 
+> ⚠️ **OSS Cluster Limitation**: Jedis with Entra ID has limited support for OSS Cluster policy. While basic operations work, MOVED redirects to internal Azure IPs cannot be followed, causing failures on some operations. **For OSS Cluster deployments, we recommend using [Lettuce](../java-lettuce/) instead.**
+
 ## 📦 Dependencies
 
 Add to your `pom.xml`:
@@ -217,6 +219,18 @@ JedisClientConfig config = DefaultJedisClientConfig.builder()
     .socketTimeoutMillis(10000)
     .build();
 ```
+
+## ⚠️ Test Results
+
+This example has been tested with **Azure Managed Redis (Balanced_B1)** using **OSS Cluster policy**:
+
+| Auth Method | Status | Notes |
+|-------------|--------|-------|
+| User-Assigned MI | ⚠️ LIMITED | Basic ops work, MOVED fails |
+| System-Assigned MI | ⚠️ LIMITED | Basic ops work, MOVED fails |
+| Service Principal | ⚠️ LIMITED | Basic ops work, MOVED fails |
+
+**Recommendation**: Use [Java Lettuce](../java-lettuce/) for full OSS Cluster support.
 
 ## 📚 Resources
 

@@ -264,6 +264,16 @@ python service_principal_example.py
 - Check firewall rules
 - Verify VNet configuration if using private endpoints
 
+## ✅ Test Results
+
+This example has been tested with **Azure Managed Redis (Balanced_B1)** using **OSS Cluster policy**:
+
+| Auth Method | Status |
+|-------------|--------|
+| User-Assigned MI | ✅ PASS |
+| System-Assigned MI | ✅ PASS |
+| Service Principal | ✅ PASS |
+
 ## 📚 Resources
 
 - [redis-py Documentation](https://redis.io/docs/latest/develop/clients/redis-py/)

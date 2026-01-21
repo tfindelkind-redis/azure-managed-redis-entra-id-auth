@@ -151,6 +151,16 @@ The configuration creates either a standard `RedisClient` or `RedisClusterClient
 - **EnterpriseCluster**: Uses `RedisClient` - server handles slot routing transparently
 - **OSSCluster**: Uses `RedisClusterClient` with `MappingSocketAddressResolver` for address remapping
 
+## ✅ Test Results
+
+This example has been tested with **Azure Managed Redis (Balanced_B1)** using **OSS Cluster policy**:
+
+| Auth Method | Status |
+|-------------|--------|
+| User-Assigned MI | ✅ PASS |
+| System-Assigned MI | ✅ PASS |
+| Service Principal | ✅ PASS |
+
 ## 🔧 Troubleshooting
 
 ### Connection Refused to 10.x.x.x (OSS Cluster)
@@ -176,6 +186,12 @@ Ensure you're running with a valid Spring profile:
 ```bash
 -Dspring-boot.run.profiles=user-mi   # or system-mi, service-principal
 ```
+
+### Excessive "Maintenance events not supported" Messages
+
+This can occur if topology refresh triggers are too aggressive. The application includes logging suppression in `application.yml` for Lettuce handshake messages. If you still see these, ensure:
+1. Topology refresh is set to a reasonable interval (5+ minutes)
+2. `enableAllAdaptiveRefreshTriggers()` is NOT used (causes constant re-auth)
 
 ## 📚 Dependencies
 

@@ -108,18 +108,24 @@ Uses `createCluster()` with `nodeAddressMap` for address remapping. All examples
 import { createCluster } from 'redis';
 
 // Create node address mapper for Azure's internal IPs
+// Note: nodeAddressMap receives a string like "10.0.2.4:8500", not an object!
 function createNodeAddressMap(publicHostname) {
     return (address) => {
-        const host = address.host;
+        // address is a string like "10.0.2.4:8500"
+        const colonIndex = address.lastIndexOf(':');
+        const host = address.substring(0, colonIndex);
+        const port = parseInt(address.substring(colonIndex + 1), 10);
+        
         // Check if this is a private IP that needs remapping
         if (host.startsWith('10.') || 
             host.startsWith('192.168.') ||
             (host.startsWith('172.') && 
              parseInt(host.split('.')[1]) >= 16 && 
              parseInt(host.split('.')[1]) <= 31)) {
-            return { host: publicHostname, port: address.port };
+            console.log(`   🔄 Mapping ${host}:${port} -> ${publicHostname}:${port}`);
+            return { host: publicHostname, port: port };
         }
-        return address;
+        return { host, port };
     };
 }
 
@@ -196,6 +202,16 @@ When using RESP2 protocol with pub/sub:
 When using transactions with token-based auth:
 - Use the `multi()` API, not raw commands
 - The client handles re-authentication safely within transactions
+
+## ✅ Test Results
+
+This example has been tested with **Azure Managed Redis (Balanced_B1)** using **OSS Cluster policy**:
+
+| Auth Method | Status |
+|-------------|--------|
+| User-Assigned MI | ✅ PASS |
+| System-Assigned MI | ✅ PASS |
+| Service Principal | ✅ PASS |
 
 ## 📚 Resources
 

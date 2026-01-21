@@ -21,7 +21,7 @@ This repository provides:
 | Language | Client Library | Entra ID Package | Cluster Policy Support |
 |----------|---------------|------------------|------------------------|
 | [Python](./examples/python/) | redis-py 5.0+ | redis-entraid 1.1+ | ✅ Enterprise & OSS Cluster |
-| [Java (Jedis)](./examples/java-jedis/) | Jedis 7.2+ | redis-authx-entraid 0.1.1-beta2 | ✅ Enterprise & OSS Cluster |
+| [Java (Jedis)](./examples/java-jedis/) | Jedis 7.2+ | redis-authx-entraid 0.1.1-beta2 | ✅ Enterprise, ⚠️ OSS Cluster (limited) |
 | [Java (Lettuce)](./examples/java-lettuce/) | Lettuce 6.8+ | redis-authx-entraid 0.1.1-beta2 | ✅ Enterprise & OSS Cluster |
 | [Java (Lettuce + Spring Boot)](./examples/java-lettuce-springboot/) | Lettuce + Spring Boot | redis-authx-entraid | ✅ Enterprise & OSS Cluster |
 | [Node.js](./examples/nodejs/) | node-redis 5.0+ | @azure/identity 4.5+ | ✅ Enterprise & OSS Cluster |
@@ -189,6 +189,24 @@ azd up
 ./run.sh setup
 ./run.sh all
 ```
+
+### Test Results Summary
+
+All examples are tested with both cluster policies and all three authentication methods:
+
+#### OSS Cluster Policy Test Results
+
+| Language | User-MI | System-MI | Service Principal | Status |
+|----------|---------|-----------|-------------------|--------|
+| Python | ✅ | ✅ | ✅ | **PASSED** |
+| Node.js | ✅ | ✅ | ✅ | **PASSED** |
+| .NET | ✅ | ✅ | ✅ | **PASSED** |
+| Java Lettuce | ✅ | ✅ | ✅ | **PASSED** |
+| Go | ✅ | ✅ | ✅ | **PASSED** |
+| Java Jedis | ⚠️ | ⚠️ | ⚠️ | **LIMITED** |
+| Spring Boot | ✅ | ✅ | ✅ | **PASSED** |
+
+> ⚠️ **Java Jedis Note**: Jedis has limited OSS Cluster support with Entra ID. MOVED redirects to internal IPs cannot be followed. Use Lettuce for OSS Cluster deployments.
 
 ### Manual VM Access
 

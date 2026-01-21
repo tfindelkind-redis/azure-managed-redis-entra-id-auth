@@ -204,6 +204,16 @@ options := entraid.CredentialsProviderOptions{
 }
 ```
 
+## ✅ Test Results
+
+This example has been tested with **Azure Managed Redis (Balanced_B1)** using **OSS Cluster policy**:
+
+| Auth Method | Status |
+|-------------|--------|
+| User-Assigned MI | ✅ PASS |
+| System-Assigned MI | ✅ PASS |
+| Service Principal | ✅ PASS |
+
 ## 📚 Resources
 
 - [go-redis Documentation](https://redis.io/docs/latest/develop/clients/go/)

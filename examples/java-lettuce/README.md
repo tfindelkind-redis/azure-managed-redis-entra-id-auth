@@ -225,6 +225,16 @@ credentials.resolveCredentials()
     .block();
 ```
 
+## ✅ Test Results
+
+This example has been tested with **Azure Managed Redis (Balanced_B1)** using **OSS Cluster policy**:
+
+| Auth Method | Status |
+|-------------|--------|
+| User-Assigned MI | ✅ PASS |
+| System-Assigned MI | ✅ PASS |
+| Service Principal | ✅ PASS |
+
 ---
 
 ## 📚 Resources
